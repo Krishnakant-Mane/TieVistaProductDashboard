@@ -1,0 +1,2368 @@
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import axios from 'axios';
+import {
+  IconRefresh,
+  IconUpload,
+  IconDownload,
+  IconCalendarEvent,
+  IconUsers,
+  IconWorld,
+  IconPlanet,
+  IconBuildingBank,
+  IconDiamond,
+  IconCrown,
+  IconSearchOff,
+  IconEdit,
+  IconTrash,
+  IconSearch
+} from '@tabler/icons-react';
+import { Chart } from 'chart.js/auto';
+import UploadModal from "./UploadModal";
+import DeleteConfirm from "./DeleteConfirm";
+
+// --- Investor Meta ---
+const IM = [
+  { k: "Indian Resident", cls: "bg-gray-50 border-gray-200 text-gray-600", lbl: "Indian Res." },
+  { k: "US NRI", cls: "bg-indigo-50 border-indigo-200 text-indigo-600", lbl: "US NRI" },
+  { k: "Canadian NRI", cls: "bg-red-50 border-red-200 text-red-600", lbl: "CA NRI" },
+  { k: "UK NRI", cls: "bg-blue-50 border-blue-200 text-blue-600", lbl: "UK NRI" },
+  { k: "Singapore NRI", cls: "bg-teal-50 border-teal-200 text-teal-600", lbl: "SG NRI" },
+  { k: "UAE NRI", cls: "bg-emerald-50 border-emerald-200 text-emerald-600", lbl: "UAE NRI" },
+  { k: "Foreign Investor", cls: "bg-orange-50 border-orange-200 text-orange-600", lbl: "Foreign" },
+  { k: "Institution", cls: "bg-cyan-50 border-cyan-200 text-cyan-600", lbl: "Institution" },
+  { k: "HNI", cls: "bg-amber-50 border-amber-200 text-amber-600", lbl: "HNI" },
+  { k: "UHNI", cls: "bg-purple-50 border-purple-200 text-purple-600", lbl: "UHNI / FO" },
+];
+const ICM = Object.fromEntries(IM.map(x => [x.k, x]));
+
+// Type badge colors matching the reference screenshots
+const typeBadgeStyle = (type) => {
+  if (!type) return { bg: '#f3f4f6', color: '#6b7280' };
+  if (type.includes('PMS')) return { bg: '#C9981A', color: '#fff' };
+  if (type.includes('AIF')) return { bg: '#a855f7', color: '#fff' };
+  if (type.includes('GIFT') || type.includes('Gift')) return { bg: '#22c55e', color: '#fff' };
+  if (type.includes('MF') || type.includes('Mutual')) return { bg: '#ef4444', color: '#fff' };
+  if (type.includes('International') || type.includes('FoF')) return { bg: '#f97316', color: '#fff' };
+  return { bg: '#6b7280', color: '#fff' };
+};
+
+const ProductManager = () => {
+  const [P, setP] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isUploadModalOpen, setUploadModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+
+  // --- Filters State ---
+  const [activeTab, setActiveTab] = useState('list');
+  const [investorPills, setInvestorPills] = useState(['all']);
+  const [dataMode, setDataMode] = useState('outbound'); // inbound/outbound toggle
+
+  // Dropdowns
+  const [search, setSearch] = useState('');
+  const [filterInvestableBy, setFilterInvestableBy] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterApproach, setFilterApproach] = useState('');
+  const [filterCurrency, setFilterCurrency] = useState('');
+  const [filterRevModel, setFilterRevModel] = useState('');
+  const [filterAMC, setFilterAMC] = useState('');
+  const [filterMonth, setFilterMonth] = useState('Months');
+
+  // Sliders
+  const [fAm, setFAm] = useState(0);
+  const [fMi, setFMi] = useState('');
+  const [fSh, setFSh] = useState(0);
+  const [fSd, setFSd] = useState(40);
+  const [fUc, setFUc] = useState(50);
+  const [fDc, setFDc] = useState(120);
+  const [fR3, setFR3] = useState(-10);
+  const [fTr, setFTr] = useState(0);
+
+  // Compare
+  const [compareIds, setCompareIds] = useState([]);
+
+  // Sorting
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState(1);
+
+  const chartRef = useRef(null);
+
+  // --- Derived Data ---
+  const amcOptions = useMemo(() => Array.from(new Set(P.map(p => p.amc))).sort(), [P]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get('http://localhost:5000/api/dashboard-products');
+      setP(res.data);
+      console.log(res.data);
+      const mdRes = await axios.get('http://localhost:5000/api/monthly-data');
+      setMonthlyData(mdRes.data);
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const handleReset = () => {
+    setInvestorPills(['all']);
+    setSearch('');
+    setFilterType(''); setFilterCategory(''); setFilterApproach('');
+    setFilterCurrency(''); setFilterRevModel(''); setFilterAMC('');
+    setFilterInvestableBy('');
+    setFSh(0); setFSd(40); setFUc(50); setFDc(120); setFAm(0); setFR3(-10); setFTr(0); setFMi('');
+    setCompareIds([]);
+    setSortKey(null);
+  };
+
+  const handlePillClick = (k) => {
+    if (k === 'all') {
+      setInvestorPills(['all']);
+      return;
+    }
+    let newPills = investorPills.filter(p => p !== 'all');
+    if (newPills.includes(k)) {
+      newPills = newPills.filter(p => p !== k);
+      if (newPills.length === 0) newPills = ['all'];
+    } else {
+      newPills.push(k);
+    }
+    setInvestorPills(newPills);
+  };
+
+  const handlePdf = () => {
+    setUploadModalOpen(true);
+  };
+
+  const handleUploadSuccess = (data) => {
+    console.log("Upload Success:", data);
+    alert(`Successfully processed! Batch ID: ${data.batchId}`);
+    fetchDashboardData();
+  };
+
+  const handleDeleteProduct = (productId, productName) => {
+    setProductToDelete({ id: productId, name: productName });
+    setDeleteConfirmOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!productToDelete) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/product/${productToDelete.id}`);
+      setDeleteConfirmOpen(false);
+      setProductToDelete(null);
+      fetchDashboardData();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete product. ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const filteredProducts = useMemo(() => {
+    return P.filter(p => {
+      if (!investorPills.includes('all')) {
+        const match = investorPills.some(inv => (p.elig || []).includes(inv));
+        if (!match) return false;
+      }
+      if (filterType && p.type !== filterType) return false;
+      if (filterCategory && p.category !== filterCategory) return false;
+      if (filterApproach && p.approach !== filterApproach) return false;
+      if (filterCurrency && p.currency !== filterCurrency) return false;
+      if (filterRevModel && p.revModel !== filterRevModel) return false;
+      if (filterAMC && p.amc !== filterAMC) return false;
+      if ((p.sharpe || 0) < fSh) return false;
+      if (p.stddev !== null && p.stddev !== undefined && p.stddev !== '' && parseFloat(p.stddev) > fSd) return false;
+      if (p.upCap && p.upCap < fUc) return false;
+      if (p.downCap && p.downCap > fDc) return false;
+      if ((p.aum || 0) < fAm) return false;
+      if (p.ret3 && p.ret3 < fR3) return false;
+      if ((p.trail || 0) < fTr) return false;
+      if (fMi) {
+        const limit = parseFloat(fMi);
+        if ((p.minInvL || 9999) > limit) return false;
+      }
+      if (search) {
+        const s = search.toLowerCase();
+        if (!p.name?.toLowerCase().includes(s) &&
+          !p.amc?.toLowerCase().includes(s) &&
+          !p.manager?.toLowerCase().includes(s)) {
+          return false;
+        }
+      }
+      return true;
+    }).sort((a, b) => {
+      if (!sortKey) return 0;
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (valA === null || valA === undefined) valA = -99999;
+      if (valB === null || valB === undefined) valB = -99999;
+      if (typeof valA === 'string') return sortDir * valA.localeCompare(valB);
+      return sortDir * (valA - valB);
+    });
+  }, [P, investorPills, filterType, filterCategory, filterApproach, filterCurrency, filterRevModel, filterAMC, fSh, fSd, fUc, fDc, fAm, fR3, fTr, fMi, search, sortKey, sortDir]);
+
+  const doSort = (k) => {
+    if (sortKey === k) {
+      setSortDir(d => d * -1);
+    } else {
+      setSortKey(k);
+      setSortDir(1);
+    }
+  };
+
+  // Stats computation
+  const stats = useMemo(() => {
+    const valid = filteredProducts;
+    if (!valid.length) return { cnt: 0, sh: '—', r3: '—', dc: '—', au: '—', tr: '—', ex: '—' };
+
+    let sumSh = 0, nSh = 0;
+    let sumR3 = 0, nR3 = 0;
+    let sumDc = 0, nDc = 0;
+    let sumAu = 0;
+    let sumTr = 0, nTr = 0;
+    let sumEx = 0, nEx = 0;
+
+    valid.forEach(p => {
+      if (p.sharpe) { sumSh += parseFloat(p.sharpe); nSh++; }
+      if (p.ret3) { sumR3 += parseFloat(p.ret3); nR3++; }
+      if (p.downCap) { sumDc += parseFloat(p.downCap); nDc++; }
+      if (p.aum) { sumAu += parseFloat(p.aum); }
+      if (p.trail) { sumTr += parseFloat(p.trail); nTr++; }
+      if (p.expRatio) { sumEx += parseFloat(p.expRatio); nEx++; }
+    });
+
+    return {
+      cnt: valid.length,
+      sh: nSh ? (sumSh / nSh).toFixed(2) : '—',
+      r3: nR3 ? (sumR3 / nR3).toFixed(1) + '%' : '—',
+      dc: nDc ? (sumDc / nDc).toFixed(1) : '—',
+      au: sumAu ? '₹' + sumAu.toLocaleString('en-IN') : '—',
+      tr: nTr ? (sumTr / nTr).toFixed(2) + '%' : '—',
+      ex: nEx ? (sumEx / nEx).toFixed(2) + '%' : '—',
+    };
+  }, [filteredProducts]);
+
+  // Risk Chart
+  useEffect(() => {
+    if (activeTab === 'risk') {
+      const ctx = document.getElementById('rc');
+      if (chartRef.current) chartRef.current.destroy();
+
+      const dataPoints = filteredProducts.filter(p => p.stddev && p.sharpe).map(p => ({
+        x: parseFloat(p.stddev),
+        y: parseFloat(p.sharpe),
+        r: Math.max(4, Math.min(25, (parseFloat(p.aum) || 100) / 200)),
+        name: p.name,
+        type: p.type || '—'
+      }));
+
+      const dsMap = {};
+      const colors = {
+        "PMS": "rgba(201, 152, 26, 0.7)",
+        "AIF Cat II": "rgba(124, 58, 237, 0.7)",
+        "AIF Cat III": "rgba(26, 86, 219, 0.7)",
+        "GIFT City – AIF": "rgba(14, 122, 69, 0.7)",
+        "International FoF": "rgba(184, 92, 0, 0.7)",
+        "Mutual Fund": "rgba(185, 28, 28, 0.7)"
+      };
+
+      dataPoints.forEach(pt => {
+        if (!dsMap[pt.type]) dsMap[pt.type] = [];
+        dsMap[pt.type].push(pt);
+      });
+
+      const datasets = Object.keys(dsMap).map(type => ({
+        label: type,
+        data: dsMap[type],
+        backgroundColor: colors[type] || "rgba(150,150,150,0.7)"
+      }));
+
+      chartRef.current = new Chart(ctx, {
+        type: 'bubble',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.raw.name} | StdDev: ${ctx.raw.x}% | Sharpe: ${ctx.raw.y}`
+              }
+            }
+          },
+          scales: {
+            x: { title: { display: true, text: 'Std Deviation (Risk %)' } },
+            y: { title: { display: true, text: 'Sharpe Ratio (Return/Risk)' } }
+          }
+        }
+      });
+    }
+  }, [activeTab, filteredProducts]);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#FAFAFA' }}>
+        <div style={{
+          width: 48, height: 48, border: '4px solid #e0e0e0', borderTopColor: '#C9981A',
+          borderRadius: '50%', animation: 'spin 0.8s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ---- INLINE STYLES (matching screenshots exactly) ----
+  const pageStyle = {
+    width: '100%', minHeight: '100vh', background: '#FAFAFA',
+    fontFamily: "'Inter', 'Segoe UI', -apple-system, sans-serif",
+    color: '#1a1a1a', padding: '0', margin: '0'
+  };
+
+  const headerStyle = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'column', padding: '28px 40px 18px', borderBottom: '1px solid #e5e5e5',
+    background: '#fff'
+  };
+
+  const logoRowStyle = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 16, marginBottom: 4
+  };
+
+  // Slider custom style
+  const sliderTrackStyle = {
+    WebkitAppearance: 'none', appearance: 'none',
+    width: '100%', height: 4, borderRadius: 2,
+    background: '#e0e0e0', outline: 'none',
+    cursor: 'pointer'
+  };
+
+  const sliderCSS = `
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #C9981A; cursor: pointer; border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #C9981A; cursor: pointer; border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+  `;
+
+  const selectStyle = {
+    padding: '8px 12px', border: '1px solid #d4d4d4', borderRadius: 6,
+    fontSize: 13, background: '#fff', color: '#333', outline: 'none',
+    cursor: 'pointer', minWidth: 130, width: '100%'
+  };
+
+  const thStyle = {
+    padding: '10px 14px', background: '#fafafa', borderBottom: '2px solid #e5e5e5',
+    fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+    color: '#888', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none'
+  };
+
+  const tdStyle = {
+    padding: '12px 14px', borderBottom: '1px solid #f0f0f0',
+    fontSize: 13, color: '#333', whiteSpace: 'nowrap'
+  };
+
+  // Compare products
+  const compareProducts = P.filter(p => compareIds.includes(p.id));
+
+  return (
+    <div style={pageStyle}>
+      <style>{sliderCSS}</style>
+
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onSuccess={handleUploadSuccess}
+      />
+      <DeleteConfirm
+        isOpen={deleteConfirmOpen}
+        onClose={() => { setDeleteConfirmOpen(false); setProductToDelete(null); }}
+        onConfirm={executeDelete}
+        productName={productToDelete?.name}
+      />
+
+      {/* ============= HEADER ============= */}
+      <div style={headerStyle}>
+        <div style={logoRowStyle}>
+          {/* TieVista Logo Circle */}
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%', border: '2px solid #1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 700, color: '#1a1a1a'
+          }}>T</div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', color: '#1a1a1a', textTransform: 'uppercase' }}>TieVista</div>
+          </div>
+          <div style={{ marginLeft: 20 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a', margin: 0, letterSpacing: '-0.02em' }}>
+              Investment Product Dashboard
+            </h1>
+          </div>
+        </div>
+        {/* Sub navigation */}
+        <div style={{ display: 'flex', gap: 28, marginTop: 8, fontSize: 13, color: '#666' }}>
+          {['PMS', 'AIF', 'Gift City', 'International', 'Mutual Funds'].map(item => (
+            <span key={item} style={{ cursor: 'pointer', transition: 'color 0.2s' }}
+              onMouseEnter={e => e.target.style.color = '#1a1a1a'}
+              onMouseLeave={e => e.target.style.color = '#666'}>
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ============= CONTENT AREA ============= */}
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '24px 32px 60px' }}>
+
+        {/* DATA AS OF + INBOUND/OUTBOUND ROW */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+              DATA AS OF
+            </div>
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(e.target.value)}
+              style={{
+                padding: '8px 16px', border: '1px solid #d4d4d4', borderRadius: 6,
+                fontSize: 13, background: '#fff', color: '#333', cursor: 'pointer', minWidth: 140
+              }}
+            >
+              <option>Months</option>
+              <option>March 2024</option>
+              <option>February 2024</option>
+              <option>January 2024</option>
+            </select>
+          </div>
+
+          {/* Inbound / Outbound toggle */}
+          <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #d4d4d4' }}>
+            <button
+              onClick={() => setDataMode('inbound')}
+              style={{
+                padding: '8px 24px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: dataMode === 'inbound' ? '#C9981A' : '#fff',
+                color: dataMode === 'inbound' ? '#fff' : '#333',
+                transition: 'all 0.2s'
+              }}
+            >Inbound</button>
+            <button
+              onClick={() => setDataMode('outbound')}
+              style={{
+                padding: '8px 24px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                borderLeft: '1px solid #d4d4d4',
+                background: dataMode === 'outbound' ? '#C9981A' : '#fff',
+                color: dataMode === 'outbound' ? '#fff' : '#333',
+                transition: 'all 0.2s'
+              }}
+            >Outbound</button>
+          </div>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button onClick={handleReset} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 6,
+              border: '1px solid #d4d4d4', background: '#fff', color: '#555', cursor: 'pointer'
+            }}>
+              <IconRefresh size={15} /> Reset
+            </button>
+            <button onClick={handlePdf} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 6,
+              border: '1px solid #C9981A', background: '#fff', color: '#C9981A', cursor: 'pointer'
+            }}>
+              <IconUpload size={15} /> Upload PDF
+            </button>
+            <button style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 6,
+              border: '1px solid #C9981A', background: '#C9981A', color: '#fff', cursor: 'pointer'
+            }}>
+              <IconDownload size={15} /> Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* ============= FILTERS CARD ============= */}
+        <div style={{
+          background: '#fff', borderRadius: 12, border: '1px solid #e5e5e5',
+          padding: '24px 28px', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          {/* Row 1: Search + dropdowns */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <IconSearch size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
+              <input
+                type="text"
+                placeholder="Search Fund Name, Manager, Strategy"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  ...selectStyle, paddingLeft: 36, width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <select value={filterInvestableBy} onChange={e => setFilterInvestableBy(e.target.value)} style={selectStyle}>
+              <option value="">Investable By</option>
+              {IM.map(i => <option key={i.k} value={i.k}>{i.k}</option>)}
+            </select>
+            <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
+              <option value="">Product Types</option>
+              <option>PMS</option>
+              <option>AIF Cat I</option>
+              <option>AIF Cat II</option>
+              <option>AIF Cat III</option>
+              <option>GIFT City – PMS</option>
+              <option>GIFT City – AIF</option>
+              <option>GIFT City – MF</option>
+              <option>International MF</option>
+              <option>International FoF</option>
+              <option>Mutual Fund</option>
+            </select>
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={selectStyle}>
+              <option value="">All Strategies</option>
+              <option>Large Cap Equity</option>
+              <option>Flexi Cap</option>
+              <option>Multi Cap</option>
+              <option>Mid & Small Cap</option>
+              <option>Multi Asset</option>
+              <option>Credit Strategy</option>
+              <option>Absolute Return</option>
+              <option>Long-Short Equity</option>
+              <option>Global Equity</option>
+              <option>International Debt</option>
+              <option>Thematic / Sectoral</option>
+            </select>
+          </div>
+
+          {/* Row 2: More dropdowns */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
+            <select value={filterApproach} onChange={e => setFilterApproach(e.target.value)} style={selectStyle}>
+              <option value="">All Approaches</option>
+              <option>Value</option>
+              <option>Growth</option>
+              <option>GARP</option>
+              <option>Blend</option>
+              <option>Top-Down</option>
+              <option>Bottom-Up</option>
+              <option>Quant</option>
+              <option>Multi-Factor</option>
+            </select>
+            <select value={filterCurrency} onChange={e => setFilterCurrency(e.target.value)} style={selectStyle}>
+              <option value="">Currency</option>
+              <option>INR</option>
+              <option>USD</option>
+              <option>EUR</option>
+              <option>GBP</option>
+              <option>AED</option>
+            </select>
+            <select value={filterRevModel} onChange={e => setFilterRevModel(e.target.value)} style={selectStyle}>
+              <option value="">Revenue Models</option>
+              <option>Trail Only</option>
+              <option>Upfront Only</option>
+              <option>Upfront + Trail</option>
+              <option>Trail + Perf Share</option>
+              <option>Upfront + Trail + Perf</option>
+            </select>
+            <select value={filterAMC} onChange={e => setFilterAMC(e.target.value)} style={selectStyle}>
+              <option value="">All AMCs</option>
+              {amcOptions.map(amc => <option key={amc}>{amc}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* ============= SLIDER FILTERS ============= */}
+        <div style={{
+          background: '#fff', borderRadius: 12, border: '1px solid #e5e5e5',
+          padding: '20px 28px', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px 32px' }}>
+            {/* AUM */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>AUM</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fAm === 0 ? '0' : fAm.toLocaleString()}</span>
+              </div>
+              <input type="range" min="0" max="50000" step="500" value={fAm}
+                onChange={e => setFAm(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* MIN INVESTMENT */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>MIN INVESTMENT</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+                  {fMi ? '₹' + fMi + 'L' : 'Any'}
+                </span>
+              </div>
+              <input type="range" min="0" max="500" step="10" value={fMi || 0}
+                onChange={e => setFMi(e.target.value === '0' ? '' : e.target.value)}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* SHARPE RATIO */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>SHARPE RATIO</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fSh.toFixed(1)}</span>
+              </div>
+              <input type="range" min="0" max="3" step="0.1" value={fSh}
+                onChange={e => setFSh(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* STD DEV */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>STD DEV</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fSd}%</span>
+              </div>
+              <input type="range" min="5" max="40" step="1" value={fSd}
+                onChange={e => setFSd(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* UP CAPTURE */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>UP CAPTURE</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fUc === 50 ? 'Any' : fUc}</span>
+              </div>
+              <input type="range" min="50" max="140" step="5" value={fUc}
+                onChange={e => setFUc(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* DOWN CAPTURE */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>DOWN CAPTURE</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fDc === 120 ? 'Any' : fDc}</span>
+              </div>
+              <input type="range" min="40" max="120" step="5" value={fDc}
+                onChange={e => setFDc(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* 3Y RETURN */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>3Y RETURN</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fR3 === -10 ? 'Any' : fR3 + '%'}</span>
+              </div>
+              <input type="range" min="-10" max="40" step="1" value={fR3}
+                onChange={e => setFR3(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+
+            {/* TRAIL % */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#888', textTransform: 'uppercase' }}>TRAIL %</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{fTr === 0 ? 'Any' : fTr.toFixed(2) + '%'}</span>
+              </div>
+              <input type="range" min="0" max="2" step="0.05" value={fTr}
+                onChange={e => setFTr(parseFloat(e.target.value))}
+                style={sliderTrackStyle}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ============= STATS CARDS (gold bordered) ============= */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 28 }}>
+          {[
+            { label: 'TOTAL PRODUCTS', value: stats.cnt },
+            { label: 'AVG SHARPE', value: stats.sh },
+            { label: 'AVG 3Y RETURN', value: stats.r3 },
+            { label: 'AVG DOWN CAPTURE', value: stats.dc },
+            { label: 'TOTAL AUM', value: stats.au },
+            { label: 'AVG TRAIL', value: stats.tr },
+            { label: 'AVG EXPENSE', value: stats.ex },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: '#fff', borderRadius: 10, border: '2px solid #C9981A',
+              padding: '14px 16px', textAlign: 'center',
+              boxShadow: '0 1px 4px rgba(201,152,26,0.1)'
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+                {s.label}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>
+                {s.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ============= TABS ============= */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 0,
+          borderBottom: '2px solid #e5e5e5', marginBottom: 0
+        }}>
+          {[
+            { id: 'list', label: 'Product List' },
+            { id: 'fee', label: 'Fee & Revenue' },
+            { id: 'compare', label: 'Compare' },
+            { id: 'risk', label: 'Risk Matrix' },
+            { id: 'monthlydata', label: 'Monthly Data' }
+          ].map(t => (
+            <div
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              style={{
+                padding: '12px 24px', fontSize: 14, fontWeight: activeTab === t.id ? 700 : 400,
+                color: activeTab === t.id ? '#1a1a1a' : '#888',
+                borderBottom: activeTab === t.id ? '3px solid #1a1a1a' : '3px solid transparent',
+                cursor: 'pointer', transition: 'all 0.2s', marginBottom: -2,
+                textDecoration: activeTab === t.id ? 'underline' : 'none',
+                textUnderlineOffset: '6px'
+              }}
+            >
+              {t.label}
+            </div>
+          ))}
+        </div>
+
+        {/* ============= TAB: PRODUCT LIST ============= */}
+        {activeTab === 'list' && (
+          <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e5e5e5', borderTop: 'none', overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}></th>
+                  <th style={thStyle} onClick={() => doSort('name')}>PRODUCT NAME</th>
+                  <th style={thStyle} onClick={() => doSort('type')}>TYPE</th>
+                  <th style={thStyle} onClick={() => doSort('category')}>STRATEGY</th>
+                  <th style={thStyle} onClick={() => doSort('manager')}>MANAGER</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('aum')}>AUM</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('sharpe')}>SHARPE</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('stddev')}>STD DEV</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('upCap')}>UP CAP</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('downCap')}>DOWN CAP</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>1M</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>3M</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>6M</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>1Y</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>3Y</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>5Y</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>SI</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('ytm')}>YTM</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('expRatio')}>EXP</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => doSort('trail')}>TRAIL</th>
+                  <th style={thStyle}>REV MODEL</th>
+                  <th style={thStyle}>INVESTABLE BY</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map(p => {
+                  const badge = typeBadgeStyle(p.type);
+                  const retColor = (v) => {
+                    const n = parseFloat(v);
+                    if (isNaN(n)) return '#999';
+                    return n > 0 ? '#16a34a' : n < 0 ? '#dc2626' : '#999';
+                  };
+                  const fmtRet = (v) => {
+                    if (!v && v !== 0) return '—';
+                    const n = parseFloat(v);
+                    if (isNaN(n)) return '—';
+                    return (n > 0 ? '+' : '') + n.toFixed(1) + '%';
+                  };
+
+                  return (
+                    <tr key={p.id} style={{ transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                      onMouseLeave={e => e.currentTarget.style.background = compareIds.includes(p.id) ? '#FFFEF5' : '#fff'}
+                    >
+                      <td style={{ ...tdStyle, width: 44 }}>
+                        <input type="checkbox"
+                          checked={compareIds.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked && compareIds.length < 4) setCompareIds([...compareIds, p.id]);
+                            else if (!e.target.checked) setCompareIds(compareIds.filter(id => id !== p.id));
+                          }}
+                          style={{ accentColor: '#C9981A', width: 15, height: 15, cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: 2 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: '#999' }}>{p.amc}</div>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 10px', borderRadius: 4,
+                          fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                          letterSpacing: '0.03em',
+                          background: badge.bg, color: badge.color
+                        }}>{p.type}</span>
+                      </td>
+                      <td style={{ ...tdStyle, color: '#555', maxWidth: 120 }}>{p.category}</td>
+                      <td style={{ ...tdStyle, color: '#555' }}>{p.manager}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>
+                        {p.aum ? p.aum.toLocaleString() + ' Cr' : '—'}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>{p.sharpe || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.stddev || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.upCap || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.downCap || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret1m), fontWeight: 500 }}>{fmtRet(p.ret1m || p.ret1)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret3m), fontWeight: 500 }}>{fmtRet(p.ret3m)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret6m), fontWeight: 500 }}>{fmtRet(p.ret6m)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret1), fontWeight: 500 }}>{fmtRet(p.ret1)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret3), fontWeight: 500 }}>{fmtRet(p.ret3)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.ret5), fontWeight: 500 }}>{fmtRet(p.ret5)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(p.sinceInception), fontWeight: 500 }}>{fmtRet(p.sinceInception)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.ytm ? p.ytm + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.expRatio ? p.expRatio + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#1a1a1a' }}>{p.trail ? p.trail + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, fontSize: 11, color: '#666' }}>{p.revModel || '—'}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, maxWidth: 200 }}>
+                          {(p.elig || []).slice(0, 2).map(e => (
+                            <span key={e} style={{
+                              display: 'inline-block', padding: '2px 6px', borderRadius: 3,
+                              fontSize: 10, fontWeight: 500, background: '#f5f5f5', color: '#555',
+                              border: '1px solid #e5e5e5'
+                            }}>{ICM[e]?.lbl || e}</span>
+                          ))}
+                          {(p.elig || []).length > 2 && (
+                            <span style={{ fontSize: 10, color: '#999', fontWeight: 500 }}>
+                              +{(p.elig || []).length - 2}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredProducts.length === 0 && (
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: '#999' }}>
+                <IconSearchOff size={36} style={{ color: '#ccc', marginBottom: 12 }} />
+                <div style={{ fontSize: 16, fontWeight: 300, marginBottom: 4 }}>No products match your filters</div>
+                <div style={{ fontSize: 13 }}>Try broadening your search or resetting filters.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============= TAB: FEE & REVENUE ============= */}
+        {activeTab === 'fee' && (
+          <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e5e5e5', borderTop: 'none', overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}>PRODUCT NAME</th>
+                  <th style={thStyle}>TYPE</th>
+                  <th style={thStyle}>STRUCTURE</th>
+                  <th style={thStyle}>MANAGER</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>MGMT FEE</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>PERF FEE</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>HURDLE</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>HWM</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>EXP RATIO</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>MIN INV</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>TRAIL</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>UPFRONT</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>PERF SHARE</th>
+                  <th style={thStyle}>REV MODEL</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>CLAWBACK</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>FEE CLASSES</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map(p => {
+                  const badge = typeBadgeStyle(p.type);
+                  return (
+                    <tr key={p.id} style={{ transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >
+                      <td style={{ ...tdStyle, width: 44 }}>
+                        <input type="checkbox"
+                          checked={compareIds.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked && compareIds.length < 4) setCompareIds([...compareIds, p.id]);
+                            else if (!e.target.checked) setCompareIds(compareIds.filter(id => id !== p.id));
+                          }}
+                          style={{ accentColor: '#C9981A', width: 15, height: 15, cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: 2 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: '#999' }}>{p.amc}</div>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 10px', borderRadius: 4,
+                          fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                          background: badge.bg, color: badge.color
+                        }}>{p.type}</span>
+                      </td>
+                      <td style={{ ...tdStyle, color: '#555' }}>{p.structure || '—'}</td>
+                      <td style={{ ...tdStyle, color: '#555' }}>{p.manager}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.mgmtFee ? p.mgmtFee + '%' : (p.expRatio ? p.expRatio + '%' : '—')}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.performance_fee_pct ? p.performance_fee_pct + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.hurdle || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>{p.high_water_mark || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.expRatio ? p.expRatio + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.min_investment_label || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{p.trail ? p.trail + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.upfront_comm_pct ? p.upfront_comm_pct + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{p.perf_fee_share_pct ? p.perf_fee_share_pct + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, fontSize: 11, color: '#666' }}>{p.revModel || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>{p.clawback || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>{(p.feeClasses || []).length || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredProducts.length === 0 && (
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: '#999' }}>
+                <IconSearchOff size={36} style={{ color: '#ccc', marginBottom: 12 }} />
+                <div style={{ fontSize: 16, fontWeight: 300 }}>No products match your filters</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============= TAB: COMPARE (table layout matching screenshot) ============= */}
+        {activeTab === 'compare' && (
+          <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e5e5e5', borderTop: 'none', padding: 0 }}>
+            {compareIds.length === 0 ? (
+              <div style={{
+                padding: '80px 20px', textAlign: 'center', color: '#999'
+              }}>
+                <div style={{ fontSize: 16, fontWeight: 300, marginBottom: 8 }}>No products selected for comparison</div>
+                <div style={{ fontSize: 13 }}>Go to Product List and check the boxes next to the products you want to compare.</div>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  {/* Header row with product names */}
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, width: 160, textAlign: 'left', background: '#fff', borderBottom: '2px solid #e5e5e5' }}></th>
+                      {compareProducts.map(p => (
+                        <th key={p.id} style={{
+                          ...thStyle, textAlign: 'center', background: '#fff',
+                          borderBottom: '2px solid #e5e5e5', fontSize: 13, fontWeight: 700,
+                          textTransform: 'none', letterSpacing: 0, color: '#1a1a1a',
+                          padding: '16px 20px'
+                        }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{p.name}</div>
+                          <div style={{ fontSize: 11, fontWeight: 400, color: '#999' }}>{p.amc}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* RETURNS section header */}
+                    <tr>
+                      <td colSpan={compareProducts.length + 1} style={{
+                        padding: '12px 14px 6px', fontSize: 11, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1a1a1a',
+                        borderBottom: '1px solid #e5e5e5', borderTop: '2px solid #e5e5e5'
+                      }}>RETURNS</td>
+                    </tr>
+                    {[
+                      { label: 'AUM', key: 'aum', fmt: v => v ? v.toLocaleString() : '—' },
+                      { label: '1M Ret', key: 'ret1m', ret: true, fallback: 'ret1' },
+                      { label: '3M Ret', key: 'ret3m', ret: true },
+                      { label: '6M Ret', key: 'ret6m', ret: true },
+                      { label: '1Y Ret', key: 'ret1', ret: true },
+                      { label: '3Y Ret', key: 'ret3', ret: true },
+                      { label: '5Y Ret', key: 'ret5', ret: true },
+                      { label: 'Max DD', key: 'maxDD', neg: true },
+                    ].map((row, i) => (
+                      <tr key={row.label}>
+                        <td style={{
+                          padding: '10px 14px', fontSize: 13, color: '#555',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>{row.label}</td>
+                        {compareProducts.map(p => {
+                          let val = p[row.key] || (row.fallback ? p[row.fallback] : null);
+                          let display, color = '#333';
+                          if (row.fmt) {
+                            display = row.fmt(val);
+                          } else if (row.ret) {
+                            const n = parseFloat(val);
+                            if (isNaN(n)) { display = '—'; color = '#999'; }
+                            else {
+                              display = (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+                              color = n > 0 ? '#16a34a' : n < 0 ? '#dc2626' : '#333';
+                            }
+                          } else if (row.neg) {
+                            const n = parseFloat(val);
+                            if (isNaN(n)) { display = '—'; color = '#999'; }
+                            else {
+                              display = n.toFixed(1) + '%';
+                              color = n < 0 ? '#dc2626' : '#333';
+                            }
+                          } else {
+                            display = val || '—';
+                          }
+                          return (
+                            <td key={p.id} style={{
+                              padding: '10px 20px', textAlign: 'center',
+                              fontSize: 13, fontWeight: 500, color,
+                              borderBottom: '1px solid #f0f0f0'
+                            }}>{display}</td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+
+                    {/* IDENTITY section header */}
+                    <tr>
+                      <td colSpan={compareProducts.length + 1} style={{
+                        padding: '12px 14px 6px', fontSize: 11, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1a1a1a',
+                        borderBottom: '1px solid #e5e5e5', borderTop: '2px solid #e5e5e5'
+                      }}>IDENTITY</td>
+                    </tr>
+                    {[
+                      { label: 'Sharpe', key: 'sharpe' },
+                      { label: 'Sortino', key: 'sortino' },
+                      { label: 'Std Dev', key: 'stddev', suffix: '%' },
+                      { label: 'Type', key: 'type' },
+                    ].map(row => (
+                      <tr key={row.label}>
+                        <td style={{
+                          padding: '10px 14px', fontSize: 13, color: '#555',
+                          borderBottom: '1px solid #f0f0f0'
+                        }}>{row.label}</td>
+                        {compareProducts.map(p => (
+                          <td key={p.id} style={{
+                            padding: '10px 20px', textAlign: 'center',
+                            fontSize: 13, fontWeight: 500, color: '#333',
+                            borderBottom: '1px solid #f0f0f0'
+                          }}>
+                            {p[row.key] ? p[row.key] + (row.suffix || '') : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============= TAB: RISK ============= */}
+        {activeTab === 'risk' && (
+          <div style={{
+            background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e5e5e5',
+            borderTop: 'none', padding: 24
+          }}>
+            <div style={{ display: 'flex', gap: 24, marginBottom: 16, fontSize: 12, color: '#666' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ccc' }} /> X = Risk (Std Dev)
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ccc' }} /> Y = Return (Sharpe)
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #999' }} /> Size = AUM
+              </div>
+            </div>
+            <div style={{ width: '100%', height: 500 }}>
+              <canvas id="rc" role="img" aria-label="Risk matrix bubble chart"></canvas>
+            </div>
+          </div>
+        )}
+
+        {/* ============= TAB: MONTHLY DATA ============= */}
+        {activeTab === 'monthlydata' && (
+          <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e5e5e5', borderTop: 'none', overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Edit</th>
+                  <th style={thStyle}>Delete</th>
+                  <th style={thStyle}>Product ID</th>
+                  <th style={thStyle}>Report Month</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>AUM (Cr)</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>1M %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>3M %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>6M %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>1Y %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>2Y %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>3Y %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Since Incep</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>YTM %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Bench Ret</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Sharpe</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Std Dev</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Up Capture</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Down Capture</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Beta</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Max Drawdown</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Calmar</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Positive Mo</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Large Cap</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Mid Cap</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Small Cap</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Cash %</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Holdings</th>
+                  <th style={thStyle}>Source File</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyData.map((md, idx) => {
+                  const retColor = (v) => {
+                    const n = parseFloat(v);
+                    if (isNaN(n)) return '#999';
+                    return n > 0 ? '#16a34a' : n < 0 ? '#dc2626' : '#999';
+                  };
+                  return (
+                    <tr key={idx} style={{ transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >
+                      <td style={tdStyle}>
+                        <button style={{ background: 'none', border: 'none', color: '#C9981A', cursor: 'pointer', padding: 4 }} title="Edit">
+                          <IconEdit size={16} />
+                        </button>
+                      </td>
+                      <td style={tdStyle}>
+                        <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }} title="Delete"
+                          onClick={() => handleDeleteProduct(md.product_id, md.product_id)}>
+                          <IconTrash size={16} />
+                        </button>
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{md.product_id}</td>
+                      <td style={tdStyle}>{md.report_month ? new Date(md.report_month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.aum_cr || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(md.return_1m), fontWeight: 500 }}>{md.return_1m ? md.return_1m + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(md.return_3m), fontWeight: 500 }}>{md.return_3m ? md.return_3m + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(md.return_6m), fontWeight: 500 }}>{md.return_6m ? md.return_6m + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: retColor(md.return_1y), fontWeight: 500 }}>{md.return_1y ? md.return_1y + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.return_2y ? md.return_2y + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.return_3y ? md.return_3y + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.since_inception ? md.since_inception + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.ytm ? md.ytm + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.benchmark_return ? md.benchmark_return + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.sharpe_ratio || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.std_dev || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.up_capture || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.down_capture || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.beta || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.max_drawdown || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.calmar_ratio || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.positive_months || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.large_cap ? md.large_cap + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.mid_cap ? md.mid_cap + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.small_cap ? md.small_cap + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.cash_percent ? md.cash_percent + '%' : '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{md.holdings_count || '—'}</td>
+                      <td style={{ ...tdStyle, fontSize: 11, color: '#888', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{md.source_file_name || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+export default ProductManager;
+
+
+
+After
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import axios from 'axios';
+import {
+  IconRefresh,
+  IconUpload,
+  IconDownload,
+  IconCalendarEvent,
+  IconUsers,
+  IconWorld,
+  IconPlanet,
+  IconBuildingBank,
+  IconDiamond,
+  IconCrown,
+  IconSearchOff,
+  IconSearch,
+  IconEdit,
+  IconTrash,
+  IconX
+} from '@tabler/icons-react';
+import { Chart } from 'chart.js/auto';
+import UploadModal from "./UploadModal";
+import DeleteConfirm from "./DeleteConfirm";
+import UpdateProductList from "./UpdateProductList";
+
+// --- Investor Meta ---
+const IM = [
+  { k: "Indian Resident", cls: "bg-gray-50 border-gray-200 text-gray-600", lbl: "Indian Res." },
+  { k: "US NRI", cls: "bg-indigo-50 border-indigo-200 text-indigo-600", lbl: "US NRI" },
+  { k: "Canadian NRI", cls: "bg-red-50 border-red-200 text-red-600", lbl: "CA NRI" },
+  { k: "UK NRI", cls: "bg-blue-50 border-blue-200 text-blue-600", lbl: "UK NRI" },
+  { k: "Singapore NRI", cls: "bg-teal-50 border-teal-200 text-teal-600", lbl: "SG NRI" },
+  { k: "UAE NRI", cls: "bg-emerald-50 border-emerald-200 text-emerald-600", lbl: "UAE NRI" },
+  { k: "Foreign Investor", cls: "bg-orange-50 border-orange-200 text-orange-600", lbl: "Foreign" },
+  { k: "Institution", cls: "bg-cyan-50 border-cyan-200 text-cyan-600", lbl: "Institution" },
+  { k: "HNI", cls: "bg-amber-50 border-amber-200 text-amber-600", lbl: "HNI" },
+  { k: "UHNI", cls: "bg-purple-50 border-purple-200 text-purple-600", lbl: "UHNI / FO" },
+];
+const ICM = Object.fromEntries(IM.map(x => [x.k, x]));
+
+const ProductManager = () => {
+  const [P, setP] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  //Upload pdf
+  const [isUploadModalOpen, setUploadModalOpen] = useState(false);
+
+  // Delete confirm
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+
+  // Update modal
+  const [isUpdateModalOpen, setUpdateModalOpen] = useState(false);
+  const [productToUpdate, setProductToUpdate] = useState(null);
+
+  // Drawer State
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedMonthlyData, setSelectedMonthlyData] = useState([]);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      axios.get(`http://localhost:5000/api/monthly-data/${selectedProduct.id}`)
+        .then(res => {
+          setSelectedMonthlyData(res.data);
+        })
+        .catch(err => console.error("Failed to fetch monthly data for product", err));
+    } else {
+      setSelectedMonthlyData([]);
+    }
+  }, [selectedProduct]);
+
+  // --- Filters State ---
+  const [activeTab, setActiveTab] = useState('list');
+  const [investorPills, setInvestorPills] = useState(['all']);
+
+  // Dropdowns
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterApproach, setFilterApproach] = useState('');
+  const [filterCapBias, setFilterCapBias] = useState('');
+  const [filterCurrency, setFilterCurrency] = useState('');
+  const [filterRevModel, setFilterRevModel] = useState('');
+  const [filterAMC, setFilterAMC] = useState('');
+
+  // Sliders
+  const [fSh, setFSh] = useState(0);
+  const [fSd, setFSd] = useState(40);
+  const [fUc, setFUc] = useState(50);
+  const [fDc, setFDc] = useState(120);
+  const [fAm, setFAm] = useState(0);
+  const [fR3, setFR3] = useState(-10);
+  const [fTr, setFTr] = useState(0);
+  const [fMi, setFMi] = useState('');
+
+  // Compare
+  const [compareIds, setCompareIds] = useState([]);
+
+  // Sorting
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState(1);
+
+  const chartRef = useRef(null);
+
+  // --- Derived Data ---
+  const amcOptions = useMemo(() => Array.from(new Set(P.map(p => p.amc))).sort(), [P]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get('http://localhost:5000/api/dashboard-products');
+      setP(res.data);
+      console.log(res.data);
+
+      const mdRes = await axios.get('http://localhost:5000/api/monthly-data');
+      setMonthlyData(mdRes.data);
+
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const handleReset = () => {
+    setInvestorPills(['all']);
+    setSearch('');
+    setFilterType(''); setFilterCategory(''); setFilterApproach(''); setFilterCapBias('');
+    setFilterCurrency(''); setFilterRevModel(''); setFilterAMC('');
+    setFSh(0); setFSd(40); setFUc(50); setFDc(120); setFAm(0); setFR3(-10); setFTr(0); setFMi('');
+    setCompareIds([]);
+    setSortKey(null);
+  };
+
+  const handlePillClick = (k) => {
+    if (k === 'all') {
+      setInvestorPills(['all']);
+      return;
+    }
+    let newPills = investorPills.filter(p => p !== 'all');
+    if (newPills.includes(k)) {
+      newPills = newPills.filter(p => p !== k);
+      if (newPills.length === 0) newPills = ['all'];
+    } else {
+      newPills.push(k);
+    }
+    setInvestorPills(newPills);
+  };
+
+  //UPLOAD
+  const handlePdf = () => {
+    setUploadModalOpen(true);
+  };
+
+  const handleUploadSuccess = (data) => {
+    console.log("Upload Success:", data);
+    alert(`Successfully processed! Batch ID: ${data.batchId}`);
+    fetchDashboardData();
+  };
+
+  const handleDeleteProduct = (productId, productName) => {
+    setProductToDelete({ id: productId, name: productName });
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleEditProduct = (product) => {
+    setProductToUpdate(product);
+    setUpdateModalOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!productToDelete) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/product/${productToDelete.id}`);
+      setDeleteConfirmOpen(false);
+      setProductToDelete(null);
+      fetchDashboardData();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete product. ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const filteredProducts = useMemo(() => {
+    return P.filter(p => {
+      // Pills
+      if (!investorPills.includes('all')) {
+        const match = investorPills.some(inv => (p.elig || []).includes(inv));
+        if (!match) return false;
+      }
+      // Dropdowns
+      if (filterType && p.type !== filterType) return false;
+      if (filterCategory && p.category !== filterCategory) return false;
+      if (filterApproach && p.approach !== filterApproach) return false;
+      if (filterCapBias && p.capBias !== filterCapBias) return false;
+      if (filterCurrency && p.currency !== filterCurrency) return false;
+      if (filterRevModel && p.revModel !== filterRevModel) return false;
+      if (filterAMC && p.amc !== filterAMC) return false;
+
+      // Sliders
+      if ((p.sharpe || 0) < fSh) return false;
+      if (p.stddev !== null && p.stddev !== undefined && p.stddev !== '' && parseFloat(p.stddev) > fSd) return false;
+      if (p.upCap && p.upCap < fUc) return false;
+      if (p.downCap && p.downCap > fDc) return false;
+      if ((p.aum || 0) < fAm) return false;
+      if (p.ret3 && p.ret3 < fR3) return false;
+      if ((p.trail || 0) < fTr) return false;
+
+      // Min Inv
+      if (fMi) {
+        const limit = parseFloat(fMi);
+        if ((p.minInvL || 9999) > limit) return false;
+      }
+
+      // Search
+      if (search) {
+        const s = search.toLowerCase();
+        if (!p.name?.toLowerCase().includes(s) &&
+          !p.amc?.toLowerCase().includes(s) &&
+          !p.manager?.toLowerCase().includes(s)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (!sortKey) return 0;
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (valA === null || valA === undefined) valA = -99999;
+      if (valB === null || valB === undefined) valB = -99999;
+
+      if (typeof valA === 'string') return sortDir * valA.localeCompare(valB);
+      return sortDir * (valA - valB);
+    });
+  }, [P, investorPills, filterType, filterCategory, filterApproach, filterCapBias, filterCurrency, filterRevModel, filterAMC, fSh, fSd, fUc, fDc, fAm, fR3, fTr, fMi, search, sortKey, sortDir]);
+
+  // Handle Sort
+  const doSort = (k) => {
+    if (sortKey === k) {
+      setSortDir(d => d * -1);
+    } else {
+      setSortKey(k);
+      setSortDir(1);
+    }
+  };
+
+  // Stats computation
+  const stats = useMemo(() => {
+    const valid = filteredProducts;
+    if (!valid.length) return { cnt: 0, sh: '—', r3: '—', dc: '—', au: '—', tr: '—', ex: '—' };
+
+    let sumSh = 0, nSh = 0;
+    let sumR3 = 0, nR3 = 0;
+    let sumDc = 0, nDc = 0;
+    let sumAu = 0;
+    let sumTr = 0, nTr = 0;
+    let sumEx = 0, nEx = 0;
+
+    valid.forEach(p => {
+      if (p.sharpe) { sumSh += parseFloat(p.sharpe); nSh++; }
+      if (p.ret3) { sumR3 += parseFloat(p.ret3); nR3++; }
+      if (p.downCap) { sumDc += parseFloat(p.downCap); nDc++; }
+      if (p.aum) { sumAu += parseFloat(p.aum); }
+      if (p.trail) { sumTr += parseFloat(p.trail); nTr++; }
+      if (p.expRatio) { sumEx += parseFloat(p.expRatio); nEx++; }
+    });
+
+    return {
+      cnt: valid.length,
+      sh: nSh ? (sumSh / nSh).toFixed(2) : '—',
+      r3: nR3 ? (sumR3 / nR3).toFixed(1) + '%' : '—',
+      dc: nDc ? (sumDc / nDc).toFixed(0) + '%' : '—',
+      au: sumAu ? '₹' + sumAu.toLocaleString() + 'Cr' : '—',
+      tr: nTr ? (sumTr / nTr).toFixed(2) + '%' : '—',
+      ex: nEx ? (sumEx / nEx).toFixed(2) + '%' : '—',
+    };
+  }, [filteredProducts]);
+
+  // Initialize Risk Chart
+  useEffect(() => {
+    if (activeTab === 'risk') {
+      const ctx = document.getElementById('rc');
+      if (chartRef.current) chartRef.current.destroy();
+
+      const dataPoints = filteredProducts.filter(p => p.stddev && p.sharpe).map(p => ({
+        x: parseFloat(p.stddev),
+        y: parseFloat(p.sharpe),
+        r: Math.max(4, Math.min(25, (parseFloat(p.aum) || 100) / 200)),
+        name: p.name,
+        type: p.type || '—'
+      }));
+
+      // Group by type for coloring
+      const dsMap = {};
+      const colors = {
+        "PMS": "rgba(201, 152, 26, 0.7)",
+        "AIF Cat II": "rgba(124, 58, 237, 0.7)",
+        "AIF Cat III": "rgba(26, 86, 219, 0.7)",
+        "GIFT City – AIF": "rgba(14, 122, 69, 0.7)",
+        "International FoF": "rgba(184, 92, 0, 0.7)",
+        "Mutual Fund": "rgba(185, 28, 28, 0.7)"
+      };
+
+      dataPoints.forEach(pt => {
+        if (!dsMap[pt.type]) dsMap[pt.type] = [];
+        dsMap[pt.type].push(pt);
+      });
+
+      const datasets = Object.keys(dsMap).map(type => ({
+        label: type,
+        data: dsMap[type],
+        backgroundColor: colors[type] || "rgba(150,150,150,0.7)"
+      }));
+
+      chartRef.current = new Chart(ctx, {
+        type: 'bubble',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.raw.name} | StdDev: ${ctx.raw.x}% | Sharpe: ${ctx.raw.y}`
+              }
+            }
+          },
+          scales: {
+            x: { title: { display: true, text: 'Std Deviation (Risk %)' } },
+            y: { title: { display: true, text: 'Sharpe Ratio (Return/Risk)' } }
+          }
+        }
+      });
+    }
+  }, [activeTab, filteredProducts]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#F8F7F4]">
+        <div className="animate-spin w-8 h-8 border-4 border-[#C9981A] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-white text-[#1A1A1A] font-sans p-4 md:p-6 pb-20">
+      <div className="max-w-[1500px] mx-auto">
+
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-8 pt-4 pb-6 border-b border-[#E0DDD6]">
+          {/* Logo */}
+          <div className="mb-4 md:mb-0 flex-shrink-0 flex flex-col items-center justify-center w-32">
+            <div className="w-10 h-10 rounded-full border-[1.5px] border-black flex items-center justify-center mb-1">
+              <span className="font-serif text-xl font-bold">T</span>
+            </div>
+            <div className="font-serif font-bold tracking-widest text-[11px] uppercase">TieVista</div>
+          </div>
+
+          <div className="flex-grow text-center flex flex-col items-center">
+            <h1 className="text-3xl md:text-4xl font-serif font-bold text-black mb-2">Investment Product Dashboard</h1>
+            <div className="text-gray-500 text-sm tracking-wide font-medium flex items-center gap-3">
+              <span>PMS</span> <span className="text-gray-300">•</span>
+              <span>AIF</span> <span className="text-gray-300">•</span>
+              <span>Gift City</span> <span className="text-gray-300">•</span>
+              <span>International</span> <span className="text-gray-300">•</span>
+              <span>Mutual Funds</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-32 justify-end">
+            <button className="p-2 rounded-lg border border-[#C8C4BC] bg-white hover:bg-[#F2F1ED] transition shadow-sm text-gray-700" onClick={handleReset} title="Reset Filters">
+              <IconRefresh size={18} />
+            </button>
+            <button onClick={handlePdf} className="p-2 rounded-lg border border-[#D4AF37] text-[#D4AF37] hover:bg-yellow-50 transition shadow-sm" title="Upload PDF">
+              <IconUpload size={18} />
+            </button>
+            <button className="p-2 rounded-lg bg-[#D4AF37] text-white hover:bg-[#b38617] border border-[#b38617] transition shadow-sm" title="Export CSV">
+              <IconDownload size={18} />
+            </button>
+
+            <UploadModal isOpen={isUploadModalOpen} onClose={() => setUploadModalOpen(false)} onSuccess={handleUploadSuccess} />
+            <DeleteConfirm isOpen={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setProductToDelete(null); }} onConfirm={executeDelete} productName={productToDelete?.name} />
+            <UpdateProductList isOpen={isUpdateModalOpen} onClose={() => { setUpdateModalOpen(false); setProductToUpdate(null); }} product={productToUpdate} onUpdateSuccess={fetchDashboardData} />
+          </div>
+        </div>
+
+        {/* DATA AS OF */}
+        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 mb-4">
+          <div className="flex flex-col">
+            <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Data as of</div>
+            <select className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm w-48 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] text-gray-700 font-medium appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]">
+              <option>Months</option>
+              <option>March 2024</option>
+            </select>
+          </div>
+          <div className="flex bg-[#F5F5F5] border border-gray-200 rounded-lg p-1 shadow-inner h-[38px]">
+            <button className="px-6 py-1 text-sm font-medium rounded-md bg-white text-gray-700 shadow-sm border border-gray-200">Inbound</button>
+            <button className="px-6 py-1 text-sm font-medium rounded-md text-black shadow-sm" style={{ background: 'linear-gradient(to right, #F0C45C, #D4AF37)' }}>Outbound</button>
+          </div>
+        </div>
+
+        {/* FILTERS SECTION */}
+        <div className="bg-white rounded-[24px] shadow-sm border border-gray-200 p-8 mb-8">
+          {/* Row 1 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <IconSearch size={16} className="text-gray-400" />
+              </div>
+              <input type="text" className="w-full text-sm pl-9 pr-3 py-2.5 rounded-lg border-2 border-[#3B82F6] outline-none" placeholder="Search Fund Name, Manager, Strategy" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={investorPills[0] === 'all' ? '' : investorPills[0]} onChange={e => handlePillClick(e.target.value || 'all')}>
+              <option value="">Investable By</option>
+              {IM.map(i => <option key={i.k} value={i.k}>{i.lbl}</option>)}
+            </select>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterType} onChange={e => setFilterType(e.target.value)}>
+              <option value="">Product Types</option>
+              <option>PMS</option>
+              <option>AIF Cat I</option>
+              <option>AIF Cat II</option>
+              <option>AIF Cat III</option>
+              <option>GIFT City – PMS</option>
+              <option>GIFT City – AIF</option>
+              <option>GIFT City – MF</option>
+              <option>International MF</option>
+              <option>International FoF</option>
+              <option>Mutual Fund</option>
+            </select>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+              <option value="">All Strategies</option>
+              <option>Large Cap Equity</option>
+              <option>Flexi Cap</option>
+              <option>Multi Cap</option>
+              <option>Mid & Small Cap</option>
+              <option>Multi Asset</option>
+              <option>Credit Strategy</option>
+              <option>Absolute Return</option>
+              <option>Long-Short Equity</option>
+              <option>Global Equity</option>
+              <option>International Debt</option>
+              <option>Thematic / Sectoral</option>
+            </select>
+          </div>
+
+          {/* Row 2 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterApproach} onChange={e => setFilterApproach(e.target.value)}>
+              <option value="">All Approaches</option>
+              <option>Value</option>
+              <option>Growth</option>
+              <option>GARP</option>
+              <option>Blend</option>
+              <option>Top-Down</option>
+              <option>Bottom-Up</option>
+              <option>Quant</option>
+              <option>Multi-Factor</option>
+            </select>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterCurrency} onChange={e => setFilterCurrency(e.target.value)}>
+              <option value="">Currency</option>
+              <option>INR</option>
+              <option>USD</option>
+              <option>EUR</option>
+              <option>GBP</option>
+              <option>AED</option>
+            </select>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterRevModel} onChange={e => setFilterRevModel(e.target.value)}>
+              <option value="">Revenue Models</option>
+              <option>Trail Only</option>
+              <option>Upfront Only</option>
+              <option>Upfront + Trail</option>
+              <option>Trail + Perf Share</option>
+              <option>Upfront + Trail + Perf</option>
+            </select>
+            <select className="w-full text-sm px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#D4AF37] text-gray-700 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]" value={filterAMC} onChange={e => setFilterAMC(e.target.value)}>
+              <option value="">All AMCs</option>
+              {amcOptions.map(amc => <option key={amc}>{amc}</option>)}
+            </select>
+          </div>
+
+          <hr className="border-gray-200 mb-8" />
+
+          {/* Sliders */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-x-12 gap-y-10">
+            {/* AUM */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">AUM</div>
+                <div className="text-sm font-bold text-black">{fAm === 0 ? '0' : fAm.toLocaleString()}</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${(fAm/5000)*100}%, #E5E7EB ${(fAm/5000)*100}%)`}} type="range" min="0" max="5000" step="100" value={fAm} onChange={e => setFAm(parseFloat(e.target.value))} />
+            </div>
+            {/* MIN INVESTMENT */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">MIN INVESTMENT</div>
+                <div className="text-sm font-bold text-black">{fMi === 0 || fMi === '' ? 'Any' : `₹${fMi}L`}</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${((fMi || 0)/500)*100}%, #E5E7EB ${((fMi || 0)/500)*100}%)`}} type="range" min="0" max="500" step="10" value={fMi || 0} onChange={e => setFMi(parseFloat(e.target.value))} />
+            </div>
+            {/* SHARPE RATIO */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">SHARPE RATIO</div>
+                <div className="text-sm font-bold text-black">{fSh.toFixed(1)}</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${(fSh/3)*100}%, #E5E7EB ${(fSh/3)*100}%)`}} type="range" min="0" max="3" step="0.1" value={fSh} onChange={e => setFSh(parseFloat(e.target.value))} />
+            </div>
+            {/* STD DEV */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">STD DEV</div>
+                <div className="text-sm font-bold text-black">{fSd}%</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${((fSd-5)/(40-5))*100}%, #E5E7EB ${((fSd-5)/(40-5))*100}%)`}} type="range" min="5" max="40" step="1" value={fSd} onChange={e => setFSd(parseFloat(e.target.value))} />
+            </div>
+            {/* UP CAPTURE */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">UP CAPTURE</div>
+                <div className="text-sm font-bold text-black">{fUc}</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${((fUc-50)/(140-50))*100}%, #E5E7EB ${((fUc-50)/(140-50))*100}%)`}} type="range" min="50" max="140" step="5" value={fUc} onChange={e => setFUc(parseFloat(e.target.value))} />
+            </div>
+            {/* DOWN CAPTURE */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">DOWN CAPTURE</div>
+                <div className="text-sm font-bold text-black">{fDc}</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${((fDc-40)/(120-40))*100}%, #E5E7EB ${((fDc-40)/(120-40))*100}%)`}} type="range" min="40" max="120" step="5" value={fDc} onChange={e => setFDc(parseFloat(e.target.value))} />
+            </div>
+            {/* 3Y RETURN */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">3Y RETURN</div>
+                <div className="text-sm font-bold text-black">{fR3}%</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${((fR3+10)/(40+10))*100}%, #E5E7EB ${((fR3+10)/(40+10))*100}%)`}} type="range" min="-10" max="40" step="1" value={fR3} onChange={e => setFR3(parseFloat(e.target.value))} />
+            </div>
+            {/* TRAIL % */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">TRAIL %</div>
+                <div className="text-sm font-bold text-black">{fTr.toFixed(2)}%</div>
+              </div>
+              <input className="w-full appearance-none h-1 bg-gray-200 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-[#D4AF37] [&::-webkit-slider-thumb]:rounded-full cursor-pointer" style={{background: `linear-gradient(to right, #D4AF37 ${(fTr/2)*100}%, #E5E7EB ${(fTr/2)*100}%)`}} type="range" min="0" max="2" step="0.05" value={fTr} onChange={e => setFTr(parseFloat(e.target.value))} />
+            </div>
+          </div>
+        </div>
+
+        {/* STATS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-10">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Total Products</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.cnt}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Sharpe</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.sh}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg 3Y Return</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.r3}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Down Capture</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.dc}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Total AUM</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.au}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Trail</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.tr}</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
+            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Expense</div>
+            <div className="text-2xl font-semibold text-gray-800">{stats.ex}</div>
+          </div>
+        </div>
+
+        {/* TABS */}
+        <div className="flex items-center gap-4 mb-4 border-b border-[#E0DDD6]">
+          {[
+            { id: 'list', label: 'Product list' },
+            { id: 'fee', label: 'Fee & Revenue' },
+            { id: 'compare', label: 'Compare' },
+            { id: 'risk', label: 'Risk matrix' },
+            { id: 'monthlydata', label: 'Monthly Data' }
+          ].map(t => (
+            <div
+              key={t.id}
+              className={`px-4 py-2.5 text-sm font-medium cursor-pointer transition border-b-2 -mb-[1px] ${activeTab === t.id ? 'border-[#C9981A] text-[#1A1A1A]' : 'border-transparent text-[#6B6760] hover:text-[#1A1A1A]'}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
+            </div>
+          ))}
+        </div>
+
+        {/* TAB: LIST */}
+        {activeTab === 'list' && (
+          <div className="bg-white rounded-xl shadow-sm border border-[#E0DDD6] overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
+              <thead>
+                <tr>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Edit</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Delete</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] w-10"></th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('product_id')}>Product ID ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('name')}>Product ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('type')}>Type ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Structure</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('category')}>Strategy ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('amc')}>AMC ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('approach')}>Approach ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('capBias')}>capBias ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('currency')}>Currency ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A] text-right" onClick={() => doSort('benchmark')}>Benchmark ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A] text-right" onClick={() => doSort('inception')}>Inception ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Intl/GC Domicile</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('manager')}>Manager ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('managerExp')}>Manager Exp ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('co_fund_manager')}>Co-fund Manager ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A]" onClick={() => doSort('min_investment_label')}>Min Investment ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A] text-right" onClick={() => doSort('lock')}>Lock In period ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A] text-right" onClick={() => doSort('liquidity')}>Liquidity ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black cursor-pointer hover:text-[#C9981A] text-right" onClick={() => doSort('exit_load')}>exit_load ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black text-right">Exp</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider cursor-pointer hover:text-[#b38617] text-[#C9981A] text-right" onClick={() => doSort('trail')}>Trail ↕</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Rev model</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Claw</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">TV Rev Split</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Notes</th>
+                  <th className="p-3 bg-white border-b border-[#E0DDD6] text-[11px] font-medium uppercase tracking-wider text-black">Investable by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map(p => {
+                  const r1 = parseFloat(p.ret1);
+                  const r3 = parseFloat(p.ret3);
+                  const r5 = parseFloat(p.ret5);
+                  return (
+                    <tr key={p.id} onClick={() => setSelectedProduct(p)} className={`cursor-pointer hover:bg-[#FAFAF8] transition ${compareIds.includes(p.id) ? 'bg-[#FDF8E7]' : ''}`}>
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={(e) => { e.stopPropagation(); handleEditProduct(p); }}>
+                          <IconEdit size={16} />
+                        </button>
+                      </td>
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <button className="text-red-500 hover:text-red-700 transition" title="Delete" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id, p.name); }}>
+                          <IconTrash size={16} />
+                        </button>
+                      </td>
+                      <td className="p-3 border-b border-[#E0DDD6]"><input type="checkbox" className="accent-[#C9981A] w-4 h-4 rounded cursor-pointer" checked={compareIds.includes(p.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => {
+                        if (e.target.checked && compareIds.length < 4) setCompareIds([...compareIds, p.id]);
+                        else if (!e.target.checked) setCompareIds(compareIds.filter(id => id !== p.id));
+                      }} /></td>
+                      <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{p.id}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{p.name}</td>
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${(p.type || '').includes('PMS') ? 'bg-[#FDF8E7] text-[#C9981A]' :
+                          (p.type || '').includes('AIF') && !p.gift ? 'bg-purple-50 text-purple-600' :
+                            p.gift ? 'bg-emerald-50 text-emerald-600' :
+                              p.intl ? 'bg-orange-50 text-orange-600' : 'bg-rose-50 text-rose-600'
+                          }`}>
+                          {p.type}
+                        </span>
+                      </td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-[#6B6760] text-[11px] max-w-[150px] truncate" title={p.structure}>{p.structure}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.category}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700 max-w-[150px] truncate" title={p.amc}>{p.amc}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.approach}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.capBias || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.currency || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right font-semibold text-gray-800">{p.benchmark}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right font-semibold text-gray-800">{p.inception}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.intl_domicile || p.gc_tax_treatment ? `${p.intl_domicile || ''} ${p.gc_denomination || ''}` : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.manager}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.managerExp}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.co_fund_manager}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.min_investment_label}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.lock || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.liquidity || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.exit_load || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.expRatio}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.trail ? p.trail + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-[#6B6760]">{p.revModel}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.clawback || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.revSplit}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-gray-700 max-w-[200px] truncate" title={p.notes}>{p.notes || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <div className="flex flex-wrap gap-1 w-[180px]">
+                          {(p.elig || []).map(e => <span key={e} className={`inline-block px-2 py-0.5 rounded border text-[9px] font-medium uppercase tracking-wider ${ICM[e]?.cls || 'bg-gray-50 border-gray-200 text-gray-600'}`}>{ICM[e]?.lbl || e}</span>)}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {filteredProducts.length === 0 && (
+              <div className="p-12 text-center text-[#6B6760] flex flex-col items-center">
+                <IconSearchOff size={36} className="text-[#C8C4BC] mb-3" />
+                <div className="text-lg font-light">No products match your filters</div>
+                <div className="text-sm mt-1">Try broadening your search or resetting filters.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: FEE */}
+        {activeTab === 'fee' && (
+          <div className="bg-white rounded-xl shadow-sm border border-[#E0DDD6] overflow-x-auto p-1">
+            <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
+              <thead>
+                <tr>
+
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Product ID</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Product</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Type</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">AMC</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Exp Ratio</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A] text-right">Trail</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A] text-right">Upfront</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A] text-right">Perf Fee</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A] text-right">Perf Share</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A]">Rev model</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#C9981A] text-right">TV Rev Split</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Clawback</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Catchup</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">HWM</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">GST</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Fee classes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map(p => (
+                  <tr key={p.id} className="hover:bg-[#FAFAF8] transition">
+
+                    <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.id}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{p.name}</td>
+                    <td className="p-3 border-b border-[#E0DDD6]">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${(p.type || '').includes('PMS') ? 'bg-[#FDF8E7] text-[#C9981A]' :
+                        (p.type || '').includes('AIF') && !p.gift ? 'bg-purple-50 text-purple-600' :
+                          p.gift ? 'bg-emerald-50 text-emerald-600' :
+                            p.intl ? 'bg-orange-50 text-orange-600' : 'bg-rose-50 text-rose-600'
+                        }`}>
+                        {p.type}
+                      </span>
+                    </td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{p.amc}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{p.expRatio ? p.expRatio + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.trail_comm_pct ? p.trail_comm_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.upfront_comm_pct ? p.upfront_comm_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.performance_fee_pct ? p.performance_fee_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.perf_fee_share_pct ? p.perf_fee_share_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-[#6B6760]">{p.revModel}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-right font-bold text-[#C9981A] bg-[#FAFAF8]">{p.tv_rev_split_pct ? p.tv_rev_split_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-gray-700">{p.clawback || '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-gray-700">{p.catchup_clause || '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-gray-700">{p.high_water_mark || '—'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6] text-[11px] text-gray-700">{p.gst_applicable === 'Y' ? `${p.gst_percent || ''}%` : 'N'}</td>
+                    <td className="p-3 border-b border-[#E0DDD6]">
+                      <div className="w-full text-[11px] border border-[#E0DDD6] rounded overflow-hidden shadow-sm my-1">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-[#F2F1ED] text-[#6B6760]">
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Class</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Mgmt Fee</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Perf Fee</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Hurdle</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Class 2</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 2 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 2 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 2 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 2 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Mgmt Fee 2</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Perf Fee 2</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Hurdle 2</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Class 3</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 3 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 3 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 3 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 3 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Mgmt Fee 3</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Perf Fee 3</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Hurdle 3</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Class 4</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 4 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 4 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 4 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 4 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Mgmt Fee 4</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Perf Fee 4</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Hurdle 4</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Class 5</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 5 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Min Inv 5 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 5 Label</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Max Inv 5 Amount</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Mgmt Fee 5</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Perf Fee 5</th>
+                              <th className="p-1.5 border-b border-[#E0DDD6] font-medium">Hurdle 5</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(p.feeClasses || []).map((fc, i) => (
+                              <tr key={i} className="bg-white">
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-800 font-medium">{fc.cls}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInvAmt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInvAmt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.mgmtFee}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.perfFee}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.hurdle}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-800 font-medium">{fc.cls2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv2Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv2Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.mgmtFee2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.perfFee2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.hurdle2}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-800 font-medium">{fc.cls3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv3Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv3Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.mgmtFee3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.perfFee3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.hurdle3}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-800 font-medium">{fc.cls4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv4Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv4Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.mgmtFee4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.perfFee4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.hurdle4}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-800 font-medium">{fc.cls5}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv5}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.minInv5Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv5}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.maxInv5Amt}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.mgmtFee5}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.perfFee5}</td>
+                                <td className="p-1.5 border-b border-[#E0DDD6] text-gray-600">{fc.hurdle5}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* TAB: COMPARE */}
+        {activeTab === 'compare' && (
+          <div>
+            <p className="text-[#6B6760] text-sm mb-4">Check up to 4 products in the list to compare side by side.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {P.filter(p => compareIds.includes(p.id)).map(p => (
+                <div key={p.id} className="bg-white border border-[#E0DDD6] rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:shadow-md transition">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-[#C9981A]"></div>
+                  <div className="text-base font-bold mb-1 truncate text-gray-900" title={p.name}>{p.name}</div>
+                  <div className="text-[11px] font-medium tracking-wide uppercase text-[#9E9A94] mb-4 pb-3 border-b border-dashed border-[#E0DDD6] truncate" title={p.amc}>{p.amc}</div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">Type</span><span className="font-semibold text-gray-800">{p.type}</span></div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">Strategy</span><span className="font-semibold text-gray-800 text-right max-w-[60%] truncate" title={p.category}>{p.category}</span></div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">AUM</span><span className="font-semibold text-gray-800">{p.aum ? `₹${p.aum}Cr` : '—'}</span></div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">Sharpe</span><span className="font-semibold text-gray-800">{p.sharpe || '—'}</span></div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">1Y Ret</span><span className={`font-semibold ${p.ret1 > 0 ? 'text-emerald-600' : 'text-gray-800'}`}>{p.ret1 ? p.ret1 + '%' : '—'}</span></div>
+                  <div className="flex justify-between py-2 border-b border-[#E0DDD6] text-sm"><span className="text-[#6B6760]">3Y Ret</span><span className={`font-semibold ${p.ret3 > 0 ? 'text-emerald-600' : 'text-gray-800'}`}>{p.ret3 ? p.ret3 + '%' : '—'}</span></div>
+                  <div className="flex justify-between py-2 text-sm bg-[#FAFAF8] -mx-5 px-5 mt-2 rounded-b-xl"><span className="text-[#6B6760] font-medium">Trail Fee</span><span className="font-bold text-[#C9981A] text-lg">{p.trail ? p.trail + '%' : '—'}</span></div>
+                </div>
+              ))}
+              {compareIds.length === 0 && <div className="col-span-full py-16 px-6 rounded-2xl border-2 border-dashed border-[#E0DDD6] text-center text-[#6B6760] bg-[#FAFAF8]">No products selected for comparison. Go to Product List and check the boxes next to the products you want to compare.</div>}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: RISK */}
+        {activeTab === 'risk' && (
+          <div>
+            <div className="flex items-center gap-6 mb-4 text-xs font-medium text-[#6B6760] bg-white p-3 rounded-lg border border-[#E0DDD6] shadow-sm">
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-300"></div> X = Risk (Std Dev)</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-300"></div> Y = Return (Sharpe)</div>
+              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full border border-gray-400 flex items-center justify-center text-[8px]"></div> Size = AUM</div>
+            </div>
+            <div className="relative w-full h-[500px] bg-white border border-[#E0DDD6] shadow-sm rounded-2xl p-6">
+              <canvas id="rc" role="img" aria-label="Risk matrix bubble chart"></canvas>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: MONTHLY DATA */}
+        {activeTab === 'monthlydata' && (
+          <div className="bg-white rounded-xl shadow-sm border border-[#E0DDD6] overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
+              <thead>
+                <tr>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Edit</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Delete</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Product ID</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Report Month</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">AUM (Cr)</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">1M %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">3M %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">6M %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">1Y %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">2Y %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">3Y %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Since Incep</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">YTM %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Bench Ret</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sharpe</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Std Dev</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Up Capture</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Down Capture</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Beta</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Max Drawdown</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Calmar Ratio</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Positive Month</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Large Cap</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Mid Cap</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Small Cap</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Cash %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Debt Cash</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Cash Percent</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holdings count</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 1</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 1%</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 2</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 2%</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 3</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 3%</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 4</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 4%</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 5</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 5%</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 1 Name</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 1 %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 2 Name</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 2 %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 3 Name</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 3 %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 4 Name</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 4 %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 5 Name</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 5 %</th>
+                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Source File Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyData.map((md, idx) => {
+                  const r1 = parseFloat(md.return_1m);
+                  const r3 = parseFloat(md.return_3m);
+                  const r6 = parseFloat(md.return_6m);
+                  const r1y = parseFloat(md.return_1y);
+
+                  return (
+                    <tr key={idx} className="hover:bg-[#FAFAF8] transition">
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit">
+                          <IconEdit size={16} />
+                        </button>
+                      </td>
+                      <td className="p-3 border-b border-[#E0DDD6]">
+                        <button className="text-red-500 hover:text-red-700 transition" title="Delete" onClick={() => handleDeleteProduct(md.product_id, md.product_id)}>
+                          <IconTrash size={16} />
+                        </button>
+                      </td>
+                      <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{md.product_id}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{md.report_month ? new Date(md.report_month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.aum_cr || '—'}</td>                      <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r1 > 0 ? 'text-emerald-600' : r1 < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_1m ? md.return_1m + '%' : '—'}</td>
+                      <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r3 > 0 ? 'text-emerald-600' : r3 < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_3m ? md.return_3m + '%' : '—'}</td>
+                      <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r6 > 0 ? 'text-emerald-600' : r6 < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_6m ? md.return_6m + '%' : '—'}</td>
+                      <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r1y > 0 ? 'text-emerald-600' : r1y < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_1y ? md.return_1y + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.return_2y ? md.return_2y + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.return_3y ? md.return_3y + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.since_inception ? md.since_inception + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.ytm ? md.ytm + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.benchmark_return ? md.benchmark_return + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sharpe_ratio || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.std_dev || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.up_capture || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.down_capture || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.beta || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.max_drawdown || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.calmar_ratio || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.positive_months || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.large_cap ? md.large_cap + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.mid_cap ? md.mid_cap + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.small_cap ? md.small_cap + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.cash_percent ? md.cash_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.debt_cash ? md.debt_cash + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.cash_percent ? md.cash_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holdings_count || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_1 || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_1_percent ? md.holding_1_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_2 || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_2_percent ? md.holding_2_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_3 || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_3_percent ? md.holding_3_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_4 || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_4_percent ? md.holding_4_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_5 || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.holding_5_percent ? md.holding_5_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_1_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_1_percent ? md.sector_1_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_2_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_2_percent ? md.sector_2_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_3_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_3_percent ? md.sector_3_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_4_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_4_percent ? md.sector_4_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_5_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_5_percent ? md.sector_5_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.source_file_name || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </div>
+
+      {/* Side Panel Overlay */}
+      {selectedProduct && (
+        <div
+          className="fixed inset-0  bg-opacity-30 z-40 transition-opacity"
+          onClick={() => setSelectedProduct(null)}
+        />
+      )}
+
+      {/* Side Panel Drawer */}
+      <div className={`fixed top-0 right-0 h-full w-full md:w-1/2 bg-[#F8F7F4] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${selectedProduct ? 'translate-x-0' : 'translate-x-full'} overflow-y-auto`}>
+        {selectedProduct && (
+          <div className="p-6 md:p-8">
+            <div className="flex justify-between items-start mb-6">
+              <div className="bg-[#1A1A1A] text-white p-6 rounded-xl w-full relative overflow-hidden shadow-lg">
+                <div className="text-[9px] uppercase tracking-widest text-[#9E9A94] mb-2">{selectedProduct.type || 'PMS - SEBI REGISTERED'}</div>
+                <h2 className="text-3xl font-serif font-bold mb-2 text-white">{selectedProduct.name}</h2>
+                <div className="text-sm text-gray-300 font-light flex gap-2 divide-x divide-gray-600">
+                  <span className="pr-2">{selectedProduct.category || 'Equity'}</span>
+                  <span className="px-2">{selectedProduct.approach || 'Bottom-Up'}</span>
+                  <span className="pl-2">Inception: {selectedProduct.inception || '—'}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedProduct(null)}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-white transition"
+                >
+                  <IconX size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded border-t-2 border-[#C9981A] p-3 text-center shadow-sm">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">AUM</div>
+                <div className="font-semibold text-[#1A1A1A]">₹{selectedProduct.aum?.toLocaleString() || '—'} Cr</div>
+              </div>
+              <div className="bg-white rounded border-t-2 border-[#C9981A] p-3 text-center shadow-sm">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Benchmark</div>
+                <div className="font-semibold text-[#1A1A1A] truncate" title={selectedProduct.benchmark}>{selectedProduct.benchmark || '—'}</div>
+              </div>
+              <div className="bg-white rounded border-t-2 border-[#C9981A] p-3 text-center shadow-sm">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Min Invest</div>
+                <div className="font-semibold text-[#1A1A1A]">{selectedProduct.min_investment_label || '—'}</div>
+              </div>
+              <div className="bg-white rounded border-t-2 border-[#C9981A] p-3 text-center shadow-sm">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Currency</div>
+                <div className="font-semibold text-[#1A1A1A]">{selectedProduct.currency || 'INR'}</div>
+              </div>
+            </div>
+
+            {/* Monthly Data Section */}
+            <div className="mb-8">
+              <h3 className="text-xs font-serif uppercase tracking-widest text-[#1A1A1A] mb-3">Monthly Data Parameters</h3>
+              {selectedMonthlyData.length > 0 ? (
+                <div className="bg-white rounded border border-[#E0DDD6] p-4 shadow-sm overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">Date</th>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">AUM (Cr)</th>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">1M Ret</th>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">3M Ret</th>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">6M Ret</th>
+                        <th className="p-2 border-b text-[10px] uppercase text-gray-500">1Y Ret</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedMonthlyData.map((md, idx) => (
+                        <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
+                          <td className="p-2 text-xs">{md.date || md.month_year || '—'}</td>
+                          <td className="p-2 text-xs">₹{md.aum_cr || '—'}</td>
+                          <td className="p-2 text-xs">{md.return_1m ? md.return_1m + '%' : '—'}</td>
+                          <td className="p-2 text-xs">{md.return_3m ? md.return_3m + '%' : '—'}</td>
+                          <td className="p-2 text-xs">{md.return_6m ? md.return_6m + '%' : '—'}</td>
+                          <td className="p-2 text-xs">{md.return_1y ? md.return_1y + '%' : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500 italic bg-white border border-[#E0DDD6] p-4 rounded text-center">Loading or no monthly data available.</div>
+              )}
+            </div>
+
+            {/* Rest of the UI elements */}
+            <div className="mb-6">
+              <h3 className="text-xs font-serif uppercase tracking-widest text-[#1A1A1A] mb-3">Investor Eligibility</h3>
+              <div className="flex flex-wrap gap-2">
+                {(selectedProduct.elig || []).map(e => <span key={e} className={`inline-block px-3 py-1 rounded-full border text-[11px] font-medium ${ICM[e]?.cls || 'bg-gray-50 border-gray-200 text-gray-600'}`}>{ICM[e]?.lbl || e}</span>)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              <div className="bg-white rounded border border-[#E0DDD6] p-4 shadow-sm border-t-4 border-t-[#C9981A]">
+                <h4 className="text-xs font-bold text-center uppercase mb-4 tracking-wider">Client Fee (Base Class)</h4>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Mgmt fee</span><span className="font-semibold">{selectedProduct.mgmtFee ? selectedProduct.mgmtFee + '%' : '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Perf fee</span><span className="font-semibold">{selectedProduct.performance_fee_pct ? selectedProduct.performance_fee_pct + '%' : '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Hurdle rate</span><span className="font-semibold">{selectedProduct.hurdle || '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Exp ratio</span><span className="font-semibold">{selectedProduct.expRatio ? selectedProduct.expRatio + '%' : '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5"><span className="text-gray-600">Exit load</span><span className="font-semibold">{selectedProduct.exit_load || '—'}</span></div>
+              </div>
+              <div className="bg-white rounded border border-[#E0DDD6] p-4 shadow-sm border-t-4 border-t-[#C9981A]">
+                <h4 className="text-xs font-bold text-center uppercase mb-4 tracking-wider">Partner Revenue</h4>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Trail Commission</span><span className="font-semibold">{selectedProduct.trail ? selectedProduct.trail + '%' : '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Upfront Commission</span><span className="font-semibold">{selectedProduct.upfront_comm_pct ? selectedProduct.upfront_comm_pct + '%' : '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Revenue Model</span><span className="font-semibold">{selectedProduct.revModel || '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5 border-b border-gray-100"><span className="text-gray-600">Rev Split</span><span className="font-semibold">{selectedProduct.revSplit || '—'}</span></div>
+                <div className="flex justify-between text-xs py-1.5"><span className="text-gray-600">Clawback</span><span className="font-semibold">{selectedProduct.clawback || 'No'}</span></div>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
+export default ProductManager;

@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold: #C9981A;
+  --color-gold-l: #F5D968;
+  --color-gold-p: #FDF8E7;
+  --color-brand-black: #1A1A1A;
+  --color-bg: #F8F7F4;
+  --color-surface: #FFFFFF;
+  --color-surface2: #F2F1ED;
+  --color-border-main: #E0DDD6;
+  --color-border2: #C8C4BC;
+  --color-text-main: #1A1A1A;
+  --color-text-m: #6B6760;
+  --color-text-h: #9E9A94;
+
+  --radius-r: 8px;
+  --radius-rl: 12px;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  font-family: 'Arial', sans-serif;
+}
+
+/* Base custom styles to retain some exact table layouts if needed */
+th {
+  cursor: pointer;
+}
+th:hover {
+  color: var(--color-gold);
+}
+tr:hover td {
+  background: #FAFAF8;
+}
+tr.sel td {
+  background: var(--color-gold-p);
+}
