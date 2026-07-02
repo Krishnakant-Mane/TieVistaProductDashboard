@@ -71,7 +71,8 @@ const UploadModal = ({ isOpen, onClose, onSuccess }) => {
           &times;
         </button>
         
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Upload Factsheet PDF</h2>
+        <h2 className="text-xl font-bold text-black">Upload Factsheet PDF</h2>
+        <h4 className='text-sm font-light text-black mb-4'>Please masked sensitive information before uploading pdf</h4>
         
         {!file ? (
           <div 
