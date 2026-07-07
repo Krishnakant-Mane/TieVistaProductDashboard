@@ -1406,7 +1406,7 @@ const ProductManager = () => {
             <div className="mb-10">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black">FEE CLASSES</h3>
-                <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={(e) => { e.stopPropagation(); if (selectedFeeClasses.length > 0) handleEditFeeClass(selectedFeeClasses[0]); }}>
+                <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={(e) => { e.stopPropagation(); if (selectedFeeClasses.length >= 0) handleEditFeeClass(selectedFeeClasses[0]); }}>
                   <IconEdit size={16} />
                 </button>
               </div>
