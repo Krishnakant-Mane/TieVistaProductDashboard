@@ -13,6 +13,19 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+// Global axios interceptor — handle 401 responses (expired token)
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      // Dispatch a storage event to trigger the checkTokenValidity in App.jsx
+      window.dispatchEvent(new Event('storage'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
