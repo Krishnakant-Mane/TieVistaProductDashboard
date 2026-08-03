@@ -70,8 +70,8 @@ const BenchmarkPanel = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-2 sm:p-4">
+      <div className="bg-white rounded-2xl w-full max-w-5xl h-[95vh] sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
           <h2 className="text-xl font-bold text-gray-800">Benchmark Management</h2>

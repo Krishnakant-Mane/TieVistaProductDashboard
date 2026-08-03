@@ -593,14 +593,13 @@ const ProductManager = () => {
       <div className="max-w-[1500px] mx-auto">
 
         {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-center border-b border-[#E0DDD6]">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-3 border-b border-[#E0DDD6] pb-3">
           {/* Logo */}
-
-          <img src="/TieVistaLogo.png" alt="" className="w-30 h-30" />
+          <img src="/TieVistaLogo.png" alt="" className="w-20 h-20 md:w-30 md:h-30 flex-shrink-0" />
 
           <div className="flex-grow text-center flex flex-col items-center">
-            <h1 className="text-3xl md:text-4xl font-serif font-bold text-black mb-2">Investment Product Dashboard</h1>
-            <div className="text-gray-500 text-sm tracking-wide font-medium flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-black mb-2">Investment Product Dashboard</h1>
+            <div className="text-gray-500 text-xs sm:text-sm tracking-wide font-medium flex flex-wrap items-center justify-center gap-1 sm:gap-3">
               <span>PMS</span> <span className="text-gray-300">•</span>
               <span>AIF</span> <span className="text-gray-300">•</span>
               <span>Gift City</span> <span className="text-gray-300">•</span>
@@ -609,7 +608,7 @@ const ProductManager = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-32 justify-end">
+          <div className="flex items-center gap-2 flex-shrink-0 justify-center md:justify-end">
             <button className="p-2 rounded-lg border border-[#C8C4BC] bg-white hover:bg-[#F2F1ED] transition shadow-sm text-gray-700" onClick={handleReset} title="Reset Filters">
               <IconRefresh size={18} />
             </button>
@@ -632,7 +631,7 @@ const ProductManager = () => {
         </div>
 
         {/* DATA AS OF */}
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 mb-4">
+        <div className="flex flex-wrap items-start gap-3 md:gap-6 mb-4 mt-3">
           <div className="flex flex-col">
             <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Month</div>
             <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm w-48 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] text-gray-700 font-medium appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%207.5L10%2012.5L15%207.5%22%20stroke%3D%22%234B5563%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_12px_center]">
@@ -679,9 +678,9 @@ const ProductManager = () => {
         </div>
 
         {/* FILTERS SECTION */}
-        <div className="bg-white rounded-[24px] shadow-sm border border-gray-200 p-8 mb-8">
+        <div className="bg-white rounded-[24px] shadow-sm border border-gray-200 p-4 md:p-8 mb-8">
           {/* Row 1 */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6">
             <div className="relative">
               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                 <IconSearch size={16} className="text-gray-400" />
@@ -709,7 +708,7 @@ const ProductManager = () => {
           </div>
 
           {/* Row 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
             <MultiSelectDropdown
               label="All Approaches"
               options={['Value', 'Growth', 'GARP', 'Blend', 'Top-Down', 'Bottom-Up', 'Quant', 'Multi-Factor']}
@@ -739,7 +738,7 @@ const ProductManager = () => {
           <hr className="border-gray-200 mb-8" />
 
           {/* Sliders */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-x-12 gap-y-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 md:gap-x-12 gap-y-8 md:gap-y-10">
             {/* AUM */}
             <div>
               <div className="flex justify-between items-end mb-2">
@@ -817,7 +816,7 @@ const ProductManager = () => {
         </div>
 
         {/* STATS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4 mb-10">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Total Products</div>
             <div className="text-2xl font-semibold text-gray-800">{stats.cnt}</div>
@@ -849,7 +848,7 @@ const ProductManager = () => {
         </div>
 
         {/* TABS */}
-        <div className="flex items-center gap-4 mb-4 border-b border-[#E0DDD6]">
+        <div className="flex items-center gap-1 sm:gap-4 mb-4 border-b border-[#E0DDD6] overflow-x-auto">
           {[
             { id: 'list', label: 'Product list' },
             { id: 'fee', label: 'Fee & Revenue' },
@@ -859,7 +858,7 @@ const ProductManager = () => {
           ].map(t => (
             <div
               key={t.id}
-              className={`px-4 py-2.5 text-sm font-medium cursor-pointer transition border-b-2 -mb-[1px] ${activeTab === t.id ? 'border-[#C9981A] text-[#1A1A1A]' : 'border-transparent text-[#6B6760] hover:text-[#1A1A1A]'}`}
+              className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium cursor-pointer transition border-b-2 -mb-[1px] whitespace-nowrap flex-shrink-0 ${activeTab === t.id ? 'border-[#C9981A] text-[#1A1A1A]' : 'border-transparent text-[#6B6760] hover:text-[#1A1A1A]'}`}
               onClick={() => setActiveTab(t.id)}
             >
               {t.label}
@@ -1185,12 +1184,12 @@ const ProductManager = () => {
         {/* TAB: RISK */}
         {activeTab === 'risk' && (
           <div>
-            <div className="flex items-center gap-6 mb-4 text-xs font-medium text-[#6B6760] bg-white p-3 rounded-lg border border-[#E0DDD6] shadow-sm">
+            <div className="flex flex-wrap items-center gap-3 md:gap-6 mb-4 text-xs font-medium text-[#6B6760] bg-white p-3 rounded-lg border border-[#E0DDD6] shadow-sm">
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-300"></div> X = Risk (Std Dev)</div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-300"></div> Y = Return (Sharpe)</div>
               <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full border border-gray-400 flex items-center justify-center text-[8px]"></div> Size = AUM</div>
             </div>
-            <div className="relative w-full h-[500px] bg-white border border-[#E0DDD6] shadow-sm rounded-2xl p-6">
+            <div className="relative w-full h-[300px] sm:h-[400px] md:h-[500px] bg-white border border-[#E0DDD6] shadow-sm rounded-2xl p-4 md:p-6">
               <canvas id="rc" role="img" aria-label="Risk matrix bubble chart"></canvas>
             </div>
           </div>
@@ -1347,9 +1346,9 @@ const ProductManager = () => {
       )}
 
       {/* Side Panel Drawer */}
-      <div className={`fixed top-0 right-0 h-full w-full md:w-[1200px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${selectedProduct ? 'translate-x-0' : 'translate-x-full'} overflow-y-auto`}>
+      <div className={`fixed top-0 right-0 h-full w-full md:w-[90vw] lg:w-[1200px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${selectedProduct ? 'translate-x-0' : 'translate-x-full'} overflow-y-auto`}>
         {selectedProduct && (
-          <div className="p-8 pb-20 font-sans">
+          <div className="p-4 sm:p-6 md:p-8 pb-20 font-sans">
             <button
               onClick={() => setSelectedProduct(null)}
               className="absolute top-6 right-6 text-gray-400 hover:text-white transition z-10 bg-black/20 rounded-full p-1"
@@ -1360,8 +1359,8 @@ const ProductManager = () => {
             {/* HEADER */}
             <div className="bg-black text-white p-6 rounded-[20px] mb-8 relative">
               <div className="text-[9px] uppercase tracking-widest text-[#9E9A94] mb-1 font-bold">{selectedProduct.type}</div>
-              <h2 className="text-[32px] font-serif font-bold mb-2 leading-tight text-white">{selectedProduct.name}</h2>
-              <div className="text-sm text-[#9E9A94] flex gap-3 items-center">
+              <h2 className="text-2xl sm:text-[32px] font-serif font-bold mb-2 leading-tight text-white">{selectedProduct.name}</h2>
+              <div className="text-sm text-[#9E9A94] flex flex-wrap gap-2 sm:gap-3 items-center">
                 <span>{selectedProduct.category}</span>
                 <span>{selectedProduct.approach}</span>
                 <span>Inception: {selectedProduct.inception}</span>
@@ -1369,7 +1368,7 @@ const ProductManager = () => {
             </div>
 
             {/* TOP METRICS */}
-            <div className="grid grid-cols-4 gap-3 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm">
                 <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">AUM APR 2026</div>
                 <div className="text-lg font-semibold text-black">₹{selectedMonthlyData[0]?.aum_cr ? Number(selectedMonthlyData[0].aum_cr).toLocaleString() : selectedProduct.aum?.toLocaleString()} Cr</div>
@@ -1633,7 +1632,7 @@ const ProductManager = () => {
                   <IconEdit size={16} />
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-11 gap-2 md:gap-3">
                 <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
                   <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_1y}%</div>
@@ -1694,7 +1693,7 @@ const ProductManager = () => {
                   <IconEdit size={16} />
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
                   <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_1y}%</div>
@@ -1734,7 +1733,7 @@ const ProductManager = () => {
               <div className="flex items-center gap-3 mb-4">
                 <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black">CAPITAL ALLOCATION BREAKDOWN</h3>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Large Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.large_cap) || 0}%</div>
@@ -1774,7 +1773,7 @@ const ProductManager = () => {
             {/* RISK METRICS */}
             <div className="mb-10">
               <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black mb-4">RISK METRICS</h3>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                 <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">SHARPE</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.sharpe_ratio) > 0 ? '+' : ''}{selectedMonthlyData[0]?.sharpe_ratio}</div>
@@ -1807,7 +1806,7 @@ const ProductManager = () => {
             </div>
 
             {/* CHARTS ROW */}
-            <div className="grid grid-cols-2 gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
               {/* SECTOR ALLOCATION */}
               <div>
                 <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black mb-4 pb-2 border-b border-gray-800 text-center">SECTOR ALLOCATION</h3>

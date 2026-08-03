@@ -87,15 +87,15 @@ const Login = ({ onLogin }) => {
       
       {/* Left Side - Background Image & Logo */}
       <div 
-        className='w-200 relative bg-cover bg-center flex flex-col justify-center items-center'
+        className='hidden md:flex w-1/2 relative bg-cover bg-center flex-col justify-center items-center'
       >
-        <img src="/DashboardLogin.png" alt="" className='z-0 w-full h-full' />
-        <img src="/TieVistaLogoWhite.png" alt="" className='z-10 absolute bottom-70 left-1/2 transform -translate-x-1/2 w-100 h-40' />
-        <h1 className='z-20 absolute bottom-66 left-85 transform -translate-x-1/2 text-xl w-100 text-white'>Trust. Transparency. Transformation</h1>
+        <img src="/DashboardLogin.png" alt="" className='z-0 w-full h-full object-cover' />
+        <img src="/TieVistaLogoWhite.png" alt="" className='z-10 absolute bottom-1/4 left-1/2 transform -translate-x-1/2 w-2/3 max-w-xs h-auto' />
+        <h1 className='z-20 absolute bottom-[22%] left-1/2 transform -translate-x-1/2 text-xl w-2/3 text-white text-center'>Trust. Transparency. Transformation</h1>
       </div>
 
       {/* Right Side - Form */}
-      <div className='w-300 flex flex-col justify-center items-center p-8'>
+      <div className='w-full md:w-1/2 flex flex-col justify-center items-center p-6 md:p-8'>
         <div className="w-full max-w-md">
           
           {/* Headers */}

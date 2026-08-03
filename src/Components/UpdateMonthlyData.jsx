@@ -178,8 +178,8 @@ const UpdateMonthlyData = ({ isOpen, onClose, monthlyData, onUpdateSuccess }) =>
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[95vh] sm:max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
@@ -211,7 +211,7 @@ const UpdateMonthlyData = ({ isOpen, onClose, monthlyData, onUpdateSuccess }) =>
         </div>
 
         {/* Form Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
           <form id="updateMonthlyDataForm" onSubmit={handleSubmit(onSubmit)}>
             {SECTIONS.map((section, sIdx) => (
               <div key={sIdx} className={activeSection === sIdx ? 'block' : 'hidden'}>
@@ -219,7 +219,7 @@ const UpdateMonthlyData = ({ isOpen, onClose, monthlyData, onUpdateSuccess }) =>
                   <div className="w-1 h-5 bg-[#C9981A] rounded-full"></div>
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">{section.title}</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {section.fields.map(field => (
                     <div key={field.name} className="flex flex-col">
                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">{field.label}</label>

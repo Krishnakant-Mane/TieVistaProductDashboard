@@ -302,17 +302,17 @@ const AddAllDashboardData = ({ isOpen, onClose, onSuccess }) => {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-          <h2 className="text-lg font-semibold text-gray-800">Add New Product</h2>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800">Add New Product</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition">
             <IconX size={20} />
           </button>
         </div>
 
         {/* Main Tabs */}
-        <div className="flex border-b border-gray-200 bg-white">
+        <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
           {['product', 'monthly', 'fee'].map((tab) => (
             <button
               key={tab}
@@ -329,7 +329,7 @@ const AddAllDashboardData = ({ isOpen, onClose, onSuccess }) => {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
           <form id="addProductForm" onSubmit={handleSubmit(onSubmit)}>
             
             {/* PRODUCT TAB */}

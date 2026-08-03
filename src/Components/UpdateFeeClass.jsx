@@ -133,13 +133,13 @@ const UpdateFeeClass = ({ isOpen, onClose, feeClassData, onUpdateSuccess }) => {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[95vh] sm:max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
           <div>
-            <h2 className="text-lg font-semibold text-gray-800">Edit Fee Classes</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Edit Fee Classes</h2>
             <p className="text-xs text-gray-500 mt-0.5">ID: {feeClassData?.id} • Product: {feeClassData?.product_id}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition p-1 rounded-full hover:bg-gray-100">
@@ -161,7 +161,7 @@ const UpdateFeeClass = ({ isOpen, onClose, feeClassData, onUpdateSuccess }) => {
         </div>
 
         {/* Form Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
           <form id="updateFeeClassForm" onSubmit={handleSubmit(onSubmit)}>
             {CLASS_SUFFIXES.slice(0, visibleClasses).map((suffix, classIdx) => {
               const fields = classFields(suffix);
@@ -177,7 +177,7 @@ const UpdateFeeClass = ({ isOpen, onClose, feeClassData, onUpdateSuccess }) => {
                     <div className="flex-1 h-px bg-gray-200"></div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-4 border-l-2 border-gray-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pl-4 border-l-2 border-gray-100">
                     {fields.map(field => (
                       <div key={field.name} className="flex flex-col">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">

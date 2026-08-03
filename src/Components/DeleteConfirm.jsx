@@ -5,7 +5,7 @@ const DeleteConfirm = ({ isOpen, onClose, onConfirm, productName }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between items-center p-5 border-b border-[#E0DDD6] bg-[#FAFAF8]">
           <div className="flex items-center gap-2 text-red-600">

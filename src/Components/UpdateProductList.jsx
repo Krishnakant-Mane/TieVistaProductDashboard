@@ -149,17 +149,17 @@ const UpdateProductList = ({ isOpen, onClose, product, onUpdateSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-          <h2 className="text-lg font-semibold text-gray-800">Edit Product: {product?.name}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800 truncate pr-2">Edit Product: {product?.name}</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition flex-shrink-0">
             <IconX size={20} />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto">
-          <form id="updateProductForm" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="p-4 sm:p-6 overflow-y-auto">
+          <form id="updateProductForm" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             
             {/* Row 1 */}
             <div className="flex flex-col">
@@ -359,7 +359,7 @@ const UpdateProductList = ({ isOpen, onClose, product, onUpdateSuccess }) => {
           </form>
         </div>
 
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 rounded-b-xl">
+        <div className="p-3 sm:p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 rounded-b-xl">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition">
             Cancel
           </button>
