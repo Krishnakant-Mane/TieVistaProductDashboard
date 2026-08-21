@@ -911,23 +911,23 @@ const ProductManager = () => {
                   const r5 = parseFloat(p.ret5);
                   return (
                     <tr key={p.id} onClick={() => setSelectedProduct(p)} className={`cursor-pointer hover:bg-[#FAFAF8] transition ${compareIds.includes(p.id) ? 'bg-[#FDF8E7]' : ''}`}>
-                      <td className="p-3 border-b border-black text-center">
+                      <td className="p-3 border-b border-gray-400 text-center">
                         <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={(e) => { e.stopPropagation(); handleEditProduct(p); }}>
                           <IconEdit size={16} />
                         </button>
                       </td>
-                      <td className="p-3 border-b border-black text-center">
+                      <td className="p-3 border-b border-gray-400 text-center">
                         <button className="text-red-500 hover:text-red-700 transition" title="Delete" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id, p.name); }}>
                           <IconTrash size={16} />
                         </button>
                       </td>
-                      <td className="p-3 border-b border-black text-center"><input type="checkbox" className="accent-[#C9981A] w-4 h-4 rounded cursor-pointer" checked={compareIds.includes(p.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => {
+                      <td className="p-3 border-b border-gray-400 text-center"><input type="checkbox" className="accent-[#C9981A] w-4 h-4 rounded cursor-pointer" checked={compareIds.includes(p.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => {
                         if (e.target.checked && compareIds.length < 4) setCompareIds([...compareIds, p.id]);
                         else if (!e.target.checked) setCompareIds(compareIds.filter(id => id !== p.id));
                       }} /></td>
-                      <td className="p-3 border-b border-black text-center">{p.id}</td>
-                      <td className="p-3 border-b border-black font-semibold text-center">{p.name}</td>
-                      <td className="p-3 border-b border-black">
+                      <td className="p-3 border-b border-gray-400 text-center">{p.id}</td>
+                      <td className="p-3 border-b border-gray-400 font-semibold text-center">{p.name}</td>
+                      <td className="p-3 border-b border-gray-400">
                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${(p.type || '').includes('PMS') ? 'bg-[#FDF8E7] text-[#C9981A] text-center' :
                           (p.type || '').includes('AIF') && !p.gift ? 'bg-purple-50 text-purple-600 text-center' :
                             p.gift ? 'bg-emerald-50 text-emerald-600 text-center' :
@@ -936,30 +936,30 @@ const ProductManager = () => {
                           {p.type}
                         </span>
                       </td>
-                      <td className="p-3 border-b border-black text-[#6B6760] text-[11px] max-w-[150px] truncate text-center" title={p.structure}>{p.structure}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.category}</td>
-                      <td className="p-3 border-b border-black text-black max-w-[150px] truncate text-center" title={p.amc}>{p.amc}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.approach}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.capBias || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.currency || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.benchmark}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.inception}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.intl_domicile || p.gc_tax_treatment ? `${p.intl_domicile || ''} ${p.gc_denomination || ''}` : '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.manager}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.managerExp}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.co_fund_manager}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.min_investment_label}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.lock || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.liquidity || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.exit_load || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.tax_implication || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.expRatio}</td>
-                      <td className="p-3 border-b border-black text-left font-bold text-[#C9981A] bg-[#FAFAF8]">{p.trail ? p.trail + '%' : '—'}</td>
-                      <td className="p-3 border-b border-black text-[11px] text-black text-center">{p.revModel}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.clawback || '—'}</td>
-                      <td className="p-3 border-b border-black text-black text-center">{p.revSplit}</td>
-                      <td className="p-3 border-b border-black text-[11px] text-black max-w-[200px] truncate text-center" title={p.notes}>{p.notes || '—'}</td>
-                      <td className="p-3 border-b border-black text-center">
+                      <td className="p-3 border-b border-gray-400 text-[#6B6760] text-[11px] max-w-[150px] truncate text-center" title={p.structure}>{p.structure}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.category}</td>
+                      <td className="p-3 border-b border-gray-400 text-black max-w-[150px] truncate text-center" title={p.amc}>{p.amc}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.approach}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.capBias || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.currency || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.benchmark}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.inception}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.intl_domicile || p.gc_tax_treatment ? `${p.intl_domicile || ''} ${p.gc_denomination || ''}` : '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.manager}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.managerExp}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.co_fund_manager}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.min_investment_label}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.lock || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.liquidity || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.exit_load || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.tax_implication || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.expRatio}</td>
+                      <td className="p-3 border-b border-gray-400 text-left font-bold text-[#C9981A] bg-[#FAFAF8]">{p.trail ? p.trail + '%' : '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-[11px] text-black text-center">{p.revModel}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.clawback || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-black text-center">{p.revSplit}</td>
+                      <td className="p-3 border-b border-gray-400 text-[11px] text-black max-w-[200px] truncate text-center" title={p.notes}>{p.notes || '—'}</td>
+                      <td className="p-3 border-b border-gray-400 text-center">
                         <div className="flex flex-wrap gap-1 w-[180px]">
                           {(p.elig || []).map(e => <span key={e} className={`inline-block px-2 py-0.5 rounded border text-[9px] font-medium uppercase tracking-wider ${ICM[e]?.cls || 'bg-gray-50 border-gray-200 text-gray-600'}`}>{ICM[e]?.lbl || e}</span>)}
                         </div>
