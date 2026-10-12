@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { IconX, IconPlus, IconMinus } from '@tabler/icons-react';
+import { API_URL } from '../services/api';
 
 // Helper to build field definitions for a single class slot
 const classFields = (suffix) => {
@@ -85,7 +86,7 @@ const UpdateFeeClass = ({ isOpen, onClose, feeClassData, onUpdateSuccess }) => {
         });
       });
 
-      await axios.put(`https://product.tievista.com/api/update/fee-classes/${feeClassData.product_id}`, payload);
+      await axios.put(`${API_URL}/update/fee-classes/${feeClassData.product_id}`, payload);
       onUpdateSuccess();
       onClose();
     } catch (err) {

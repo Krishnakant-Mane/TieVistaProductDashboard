@@ -1,8 +1,7 @@
 import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import axios from 'axios'
-
-const API = 'https://product.tievista.com/api';
+import { API_URL } from '../services/api';
 
 const Login = ({ onLogin }) => {
   const { register, handleSubmit, getValues, formState: { errors } } = useForm();
@@ -23,7 +22,7 @@ const Login = ({ onLogin }) => {
     setLoading(true);
     setMessage('');
     try {
-      await axios.post(`${API}/send-otp`, { email });
+      await axios.post(`${API_URL}/send-otp`, { email });
       setOtpSent(true);
       setStep(2);
       setMessage('OTP sent to your email');
@@ -45,7 +44,7 @@ const Login = ({ onLogin }) => {
     setLoading(true);
     setMessage('');
     try {
-      const res = await axios.post(`${API}/verify-otp`, { email, otp });
+      const res = await axios.post(`${API_URL}/verify-otp`, { email, otp });
       if (res.data.success) {
         setOtpVerified(true);
         setStep(3);
@@ -67,7 +66,7 @@ const Login = ({ onLogin }) => {
     setLoading(true);
     setMessage('');
     try {
-      const res = await axios.post(`${API}/login`, {
+      const res = await axios.post(`${API_URL}/login`, {
         email: data.email,
         password: data.password
       });

@@ -18,7 +18,8 @@ import {
   IconX,
   IconPlus,
   IconCheck,
-  IconChevronDown
+  IconChevronDown,
+  IconInfoCircle 
 } from '@tabler/icons-react';
 import { Chart } from 'chart.js/auto';
 import UploadModal from "./UploadModal";
@@ -29,6 +30,8 @@ import UpdateMonthlyData from "./UpdateMonthlyData";
 import AddAllDashboardData from "./AddAllDashboardData";
 import AmcPanel from "./AmcPanel";
 import BenchmarkPanel from "./BenchmarkPanel";
+import { API_URL } from '../services/api';
+import Chatbot from './Chatbot';
 
 // --- Investor Meta ---
 const IM = [
@@ -131,6 +134,33 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
     </div>
   );
 };
+// Returns the source monthlydata ID for a specific field:
+// - If the field was backfilled from a previous file, returns that previous record's ID
+// - Otherwise returns the current record's own ID (the newly scanned PDF)
+const getFieldSourceId = (md, fieldName) => {
+  if (!md) return 'N/A';
+  try {
+    const sources = typeof md.field_sources === 'string'
+      ? JSON.parse(md.field_sources)
+      : (md.field_sources || {});
+    if (sources[fieldName] !== undefined) return sources[fieldName];
+    return md.product_id || md.id || 'N/A';
+  } catch {
+    return md.product_id || md.id || 'N/A';
+  }
+};
+
+// Returns the formatted report_month for a specific field based on its source ID
+const getFieldSourceMonth = (md, fieldName, allMonthlyData) => {
+  const sourceId = getFieldSourceId(md, fieldName);
+  if (!sourceId || sourceId === 'N/A') return '';
+  const sourceRecord = allMonthlyData.find(item => item.product_id == sourceId);
+  if (sourceRecord && sourceRecord.report_month) {
+    const date = new Date(sourceRecord.report_month);
+    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', "'"); // "Aug'26" 
+  }
+  return '';
+};
 
 const ProductManager = () => {
   const [P, setP] = useState([]);
@@ -167,12 +197,12 @@ const ProductManager = () => {
 
   useEffect(() => {
     if (selectedProduct) {
-      axios.get(`https://product.tievista.com/api/monthly-data/${selectedProduct.id}`)
+      axios.get(`${API_URL}/monthly-data/${selectedProduct.id}`)
         .then(res => {
           setSelectedMonthlyData(res.data);
         })
         .catch(err => console.error("Failed to fetch monthly data for product", err));
-      axios.get(`https://product.tievista.com/api/fee-classes/${selectedProduct.id}`)
+      axios.get(`${API_URL}/fee-classes/${selectedProduct.id}`)
         .then(res => {
           setSelectedFeeClasses(res.data);
         })
@@ -232,7 +262,7 @@ const ProductManager = () => {
   const [compareIds, setCompareIds] = useState([]);
   const [compareSubTab, setCompareSubTab] = useState('product');
 
-  // Sorting
+  // Sorting (Products / Fee tab — server-side)
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState(1);
 
@@ -314,7 +344,7 @@ const ProductManager = () => {
     try {
       if (showLoader) setLoading(true);
       const payload = buildFilterPayload();
-      const res = await axios.post('https://product.tievista.com/api/filter-products', payload);
+      const res = await axios.post(`${API_URL}/filter-products`, payload);
       setP(res.data);
     } catch (err) {
       console.error("Failed to fetch filtered data", err);
@@ -327,20 +357,20 @@ const ProductManager = () => {
     try {
       setLoading(true);
       // Initial load — fetch all products (empty filter)
-      const res = await axios.post('https://product.tievista.com/api/filter-products', {});
+      const res = await axios.post(`${API_URL}/filter-products`, {});
       setP(res.data);
 
-      const mdRes = await axios.get('https://product.tievista.com/api/monthly-data');
+      const mdRes = await axios.get(`${API_URL}/monthly-data`);
       setMonthlyData(mdRes.data);
 
-      const amcsRes = await axios.get('https://product.tievista.com/api/amcs');
+      const amcsRes = await axios.get(`${API_URL}/amcs`);
       if (amcsRes.data && Array.isArray(amcsRes.data)) {
         const amcNames = Array.from(new Set(amcsRes.data.map(a => a.amc_name).filter(Boolean))).sort();
         setAmcOptions(amcNames);
       }
 
       // Fetch available months/years from monthlydata
-      const reportMonthsRes = await axios.get('https://product.tievista.com/api/report-months');
+      const reportMonthsRes = await axios.get(`${API_URL}/report-months`);
       if (reportMonthsRes.data) {
         setMonthOptions(reportMonthsRes.data.months || []);
         setYearOptions(reportMonthsRes.data.years || []);
@@ -432,7 +462,7 @@ const ProductManager = () => {
     fetchDashboardData();
     // Refresh the side panel fee classes
     if (selectedProduct) {
-      axios.get(`https://product.tievista.com/api/fee-classes/${selectedProduct.id}`)
+      axios.get(`${API_URL}/fee-classes/${selectedProduct.id}`)
         .then(res => setSelectedFeeClasses(res.data))
         .catch(err => console.error("Failed to refresh fee classes", err));
     }
@@ -442,7 +472,7 @@ const ProductManager = () => {
     fetchDashboardData();
     // Refresh the side panel monthly data
     if (selectedProduct) {
-      axios.get(`https://product.tievista.com/api/monthly-data/${selectedProduct.id}`)
+      axios.get(`${API_URL}/monthly-data/${selectedProduct.id}`)
         .then(res => setSelectedMonthlyData(res.data))
         .catch(err => console.error("Failed to refresh monthly data", err));
     }
@@ -451,7 +481,7 @@ const ProductManager = () => {
   const executeDelete = async () => {
     if (!productToDelete) return;
     try {
-      await axios.delete(`https://product.tievista.com/api/product/${productToDelete.id}`);
+      await axios.delete(`${API_URL}/product/${productToDelete.id}`);
       setDeleteConfirmOpen(false);
       setProductToDelete(null);
       fetchDashboardData();
@@ -480,7 +510,7 @@ const ProductManager = () => {
     return P.filter(p => compareIds.includes(p.id));
   }, [P, compareIds]);
 
-  // Handle Sort
+  // Handle Sort (Products / Fee tab — triggers server-side re-fetch)
   const doSort = (k) => {
     if (sortKey === k) {
       setSortDir(d => d * -1);
@@ -653,19 +683,17 @@ const ProductManager = () => {
           <div className="flex bg-[#F5F5F5] border border-gray-200 rounded-lg p-1 shadow-inner h-[38px]">
             <button
               onClick={() => setFlowFilter(flowFilter === 'inbound' ? 'all' : 'inbound')}
-              className={`px-6 py-1 text-sm font-medium rounded-md transition-all ${
-                flowFilter === 'inbound'
+              className={`px-6 py-1 text-sm font-medium rounded-md transition-all ${flowFilter === 'inbound'
                   ? 'bg-white text-gray-700 shadow-sm border border-gray-200'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
             >Inbound</button>
             <button
               onClick={() => setFlowFilter(flowFilter === 'outbound' ? 'all' : 'outbound')}
-              className={`px-6 py-1 text-sm font-medium rounded-md transition-all ${
-                flowFilter === 'outbound'
+              className={`px-6 py-1 text-sm font-medium rounded-md transition-all ${flowFilter === 'outbound'
                   ? 'text-black shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
-              }`}
+                }`}
               style={flowFilter === 'outbound' ? { background: 'linear-gradient(to right, #F0C45C, #D4AF37)' } : {}}
             >Outbound</button>
           </div>
@@ -685,7 +713,7 @@ const ProductManager = () => {
               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                 <IconSearch size={16} className="text-gray-400" />
               </div>
-              <input type="text" className="w-full text-sm pl-9 pr-3 py-2.5 rounded-lg border-2 border-[#3B82F6] outline-none" placeholder="Search Fund Name, Manager, Strategy" value={search} onChange={e => setSearch(e.target.value)} />
+              <input type="text" className="w-full text-sm pl-9 pr-3 py-2.5 rounded-lg border-2 border-[#D4AF37] outline-none" placeholder="Search Fund Name, Manager, Strategy" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <MultiSelectDropdown
               label="Investable By"
@@ -695,7 +723,7 @@ const ProductManager = () => {
             />
             <MultiSelectDropdown
               label="Product Types"
-              options={['PMS', "SIF",'MF', 'AIF CAT I', 'AIF CAT II', 'AIF CAT III', 'GIFTCITY PMS - INBOUND', 'GIFTCITY PMS - OUTBOUND', 'GIFTCITY AIF CAT I - INBOUND', 'GIFTCITY AIF CAT II - INBOUND', 'GIFTCITY AIF CAT III - INBOUND', 'GIFTCITY AIF CAT I - OUTBOUND', 'GIFTCITY AIF CAT II - OUTBOUND', 'GIFTCITY AIF CAT III - OUTBOUND', 'GIFTCITY MF INBOUND', 'GIFTCITY MF OUTBOUND', 'INTERNATIONAL ETF', 'INTERNATIONAL FUNDS' ]}
+              options={['PMS', "SIF", 'MF', 'AIF CAT I', 'AIF CAT II', 'AIF CAT III', 'GIFTCITY PMS - INBOUND', 'GIFTCITY PMS - OUTBOUND', 'GIFTCITY AIF CAT I - INBOUND', 'GIFTCITY AIF CAT II - INBOUND', 'GIFTCITY AIF CAT III - INBOUND', 'GIFTCITY AIF CAT I - OUTBOUND', 'GIFTCITY AIF CAT II - OUTBOUND', 'GIFTCITY AIF CAT III - OUTBOUND', 'GIFTCITY MF INBOUND', 'GIFTCITY MF OUTBOUND', 'INTERNATIONAL ETF', 'INTERNATIONAL FUNDS']}
               selected={filterType}
               onChange={setFilterType}
             />
@@ -821,30 +849,6 @@ const ProductManager = () => {
             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Total Products</div>
             <div className="text-2xl font-semibold text-gray-800">{stats.cnt}</div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Sharpe</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.sh}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg 3Y Return</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.r3}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Down Capture</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.dc}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Total AUM</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.au}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Trail</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.tr}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 border-t-4 border-t-[#D4AF37] p-4 flex flex-col items-center justify-center">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 text-center">Avg Expense</div>
-            <div className="text-2xl font-semibold text-gray-800">{stats.ex}</div>
-          </div>
         </div>
 
         {/* TABS */}
@@ -852,9 +856,9 @@ const ProductManager = () => {
           {[
             { id: 'list', label: 'Product list' },
             { id: 'fee', label: 'Fee & Revenue' },
+            { id: 'monthlydata', label: 'Monthly Data' },
             { id: 'compare', label: 'Compare' },
             { id: 'risk', label: 'Risk matrix' },
-            { id: 'monthlydata', label: 'Monthly Data' }
           ].map(t => (
             <div
               key={t.id}
@@ -981,36 +985,35 @@ const ProductManager = () => {
 
         {/* TAB: FEE */}
         {activeTab === 'fee' && (
-          <div className="bg-white shadow-sm border border-black overflow-x-auto p-1">
+          <div className="bg-white shadow-sm border border-black overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
               <thead>
                 <tr>
-
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Product ID</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Product</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Type</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">AMC</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Exp Ratio</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Trail</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Upfront</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Perf Fee</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Perf Share</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Rev model</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">TV Rev Split</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Clawback</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">Catchup</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">HWM</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center">GST</th>
-                  <th className="p-3 bg-white border-b border-black text-[11px] font-bold uppercase tracking-wider text-black text-center ">Fee classes</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Product ID</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Product</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Type</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">AMC</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Exp Ratio</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Trail</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Upfront</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Perf Fee</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Perf Share</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Rev model</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">TV Rev Split</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Clawback</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Catchup</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">HWM</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">GST</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center ">Fee classes</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.map(p => (
                   <tr key={p.id} className="hover:bg-[#FAFAF8] transition">
 
-                    <td className="p-3 border-b border-black text-black text-center">{p.id}</td>
-                    <td className="p-3 border-b border-black font-semibold text-black text-center">{p.name}</td>
-                    <td className="p-3 border-b border-black">
+                    <td className="p-3 border-b border-gray-400 text-black text-center">{p.id}</td>
+                    <td className="p-3 border-b border-gray-400 font-semibold text-black text-center">{p.name}</td>
+                    <td className="p-3 border-b border-gray-400">
                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${(p.type || '').includes('PMS') ? 'bg-[#FDF8E7] text-[#C9981A] text-center' :
                         (p.type || '').includes('AIF') && !p.gift ? 'bg-purple-50 text-purple-600 text-center' :
                           p.gift ? 'bg-emerald-50 text-emerald-600 text-center' :
@@ -1019,19 +1022,19 @@ const ProductManager = () => {
                         {p.type}
                       </span>
                     </td>
-                    <td className="p-3 border-b border-black text-black text-center">{p.amc}</td>
-                    <td className="p-3 border-b border-black text-center text-black">{p.expRatio ? p.expRatio + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-center font-bold text-black bg-[#FAFAF8]">{p.trail_comm_pct ? p.trail_comm_pct + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-center font-bold text-black bg-[#FAFAF8]">{p.upfront_comm_pct ? p.upfront_comm_pct + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-center font-bold text-black bg-[#FAFAF8]">{p.performance_fee_pct ? p.performance_fee_pct + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-center font-bold text-black bg-[#FAFAF8]">{p.perf_fee_share_pct ? p.perf_fee_share_pct + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-[11px] text-black">{p.revModel}</td>
-                    <td className="p-3 border-b border-black text-center font-bold text-black bg-[#FAFAF8]">{p.tv_rev_split_pct ? p.tv_rev_split_pct + '%' : '—'}</td>
-                    <td className="p-3 border-b border-black text-center text-black">{p.clawback || '—'}</td>
-                    <td className="p-3 border-b border-black text-center text-black">{p.catchup_clause || '—'}</td>
-                    <td className="p-3 border-b border-black text-[11px] text-black">{p.high_water_mark || '—'}</td>
-                    <td className="p-3 border-b border-black text-[11px] text-black">{p.gst_applicable === 'Y' ? `${p.gst_percent || ''}%` : 'N'}</td>
-                    <td className="p-3 border-b border-black text-center text-black font-medium">
+                    <td className="p-3 border-b border-gray-400 text-black text-center">{p.amc}</td>
+                    <td className="p-3 border-b border-gray-400 text-center text-black">{p.expRatio ? p.expRatio + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center font-bold text-black bg-[#FAFAF8]">{p.trail_comm_pct ? p.trail_comm_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center font-bold text-black bg-[#FAFAF8]">{p.upfront_comm_pct ? p.upfront_comm_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center font-bold text-black bg-[#FAFAF8]">{p.performance_fee_pct ? p.performance_fee_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center font-bold text-black bg-[#FAFAF8]">{p.perf_fee_share_pct ? p.perf_fee_share_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-[11px] text-black">{p.revModel}</td>
+                    <td className="p-3 border-b border-gray-400 text-center font-bold text-black bg-[#FAFAF8]">{p.tv_rev_split_pct ? p.tv_rev_split_pct + '%' : '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center text-black">{p.clawback || '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center text-black">{p.catchup_clause || '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-[11px] text-black">{p.high_water_mark || '—'}</td>
+                    <td className="p-3 border-b border-gray-400 text-[11px] text-black">{p.gst_applicable === 'Y' ? `${p.gst_percent || ''}%` : 'N'}</td>
+                    <td className="p-3 border-b border-gray-400 text-center text-black font-medium">
                       {(() => {
                         if (!p.feeClasses || p.feeClasses.length === 0) return 0;
                         const fc = p.feeClasses[0];
@@ -1099,6 +1102,7 @@ const ProductManager = () => {
                 };
 
                 const productRows = [
+                  { label: 'Product Id', render: (p) => <span>{p.id}</span> },
                   { label: 'Type', render: (p) => <span>{p.type || '—'}</span> },
                   { label: 'Strategy', render: (p) => <span>{p.category || '—'}</span> },
                   { label: 'AUM', render: (p) => <span>{p.aum ? Number(p.aum).toLocaleString() : '—'}</span> },
@@ -1111,7 +1115,8 @@ const ProductManager = () => {
                 ];
 
                 const portfolioRows = [
-                  { label: 'Portfolio PE', render: (p) => <span>{'—'}</span> },
+                  { label: 'Product Id', render: (p) => <span>{p.id}</span> },
+                  { label: 'Portfolio PE', render: (p) => { const md = getMd(p.id); return <span>{md.pe_ratio ? md.pe_ratio + '%' : '—'}</span>; } },
                   { label: 'Large Cap%', render: (p) => { const md = getMd(p.id); return <span>{md.large_cap ? md.large_cap + '%' : '—'}</span>; } },
                   { label: 'Mid Cap%', render: (p) => { const md = getMd(p.id); return <span>{md.mid_cap ? md.mid_cap + '%' : '—'}</span>; } },
                   { label: 'Small Cap%', render: (p) => { const md = getMd(p.id); return <span>{md.small_cap ? md.small_cap + '%' : '—'}</span>; } },
@@ -1197,71 +1202,85 @@ const ProductManager = () => {
 
         {/* TAB: MONTHLY DATA */}
         {activeTab === 'monthlydata' && (
-          <div className="bg-white rounded-xl shadow-sm border border-[#E0DDD6] overflow-x-auto">
+          <div className="bg-white shadow-sm border border-black overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
               <thead>
                 <tr>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Edit</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Delete</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Product ID</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94]">Report Month</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">AUM (Cr)</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">1M %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">3M %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">6M %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">1Y %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">2Y %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">3Y %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Since Incep</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">YTM %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Mod</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Bench Ret</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sharpe</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Std Dev</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Up Capture</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Down Capture</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Beta</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Max Drawdown</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Calmar Ratio</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Positive Month</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Large Cap</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Mid Cap</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Small Cap</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Cash %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Debt Cash</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holdings count</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 1</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 1%</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 2</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 2%</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 3</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 3%</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 4</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 4%</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 5</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Holding 5%</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 1 Name</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 1 %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 2 Name</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 2 %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 3 Name</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 3 %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 4 Name</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 4 %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 5 Name</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Sector 5 %</th>
-                  <th className="p-3 bg-[#FAFAF8] border-b border-[#E0DDD6] text-[11px] font-bold uppercase tracking-wider text-[#9E9A94] text-right">Source File Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black">Edit</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black">Delete</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black">Product ID</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black">Product Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black">Report Month</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">AUM (Cr)</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">1M %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">3M %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">6M %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">1Y %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">2Y %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">3Y %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Since Incep</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">YTM %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Mod</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret Since Incep</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 1M</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 3M</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 6M</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 1Y</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 2Y</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 3Y</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 4Y</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Bench Ret 5Y</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sharpe</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Std Dev</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Up Capture</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Down Capture</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Beta</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Max Drawdown</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Calmar Ratio</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Positive Month</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Large Cap</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Mid Cap</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Small Cap</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Cash %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Debt Cash</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holdings count</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 1</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 1%</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 2</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 2%</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 3</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 3%</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 4</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 4%</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 5</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Holding 5%</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 1 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 1 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 2 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 2 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 3 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 3 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 4 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-right">Sector 4 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Sector 5 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Sector 5 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Sector 6 Name</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Sector 6 %</th>
+                  <th className="p-3 bg-white border-b border-black text-[11px] font-medium uppercase tracking-wider text-black text-center">Source File</th>
                 </tr>
               </thead>
               <tbody>
-                {monthlyData.map((md, idx) => {
+                {filteredProducts.map(p => {
+                  const md = monthlyDataByProduct[p.id];
+                  if (!md) return null;
+
                   const r1 = parseFloat(md.return_1m);
                   const r3 = parseFloat(md.return_3m);
                   const r6 = parseFloat(md.return_6m);
                   const r1y = parseFloat(md.return_1y);
 
                   return (
-                    <tr key={idx} className="hover:bg-[#FAFAF8] transition">
+                    <tr key={p.id} className="hover:bg-[#FAFAF8] transition">
                       <td className="p-3 border-b border-[#E0DDD6]">
                         <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={() => handleEditMonthlyData(md)}>
                           <IconEdit size={16} />
@@ -1272,7 +1291,8 @@ const ProductManager = () => {
                           <IconTrash size={16} />
                         </button>
                       </td>
-                      <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{md.product_id}</td>
+                      <td className="p-3 border-b border-[#E0DDD6]  text-gray-800">{md.product_id}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] font-semibold text-gray-800">{filteredProducts.find(fp => fp.id === md.product_id)?.product_name || '—'}</td>
                       <td className="p-3 border-b border-[#E0DDD6] text-gray-700">{md.report_month ? new Date(md.report_month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}</td>
                       <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.aum_cr || '—'}</td>                      <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r1 > 0 ? 'text-emerald-600' : r1 < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_1m ? md.return_1m + '%' : '—'}</td>
                       <td className={`p-3 border-b border-[#E0DDD6] text-right font-medium ${r3 > 0 ? 'text-emerald-600' : r3 < 0 ? 'text-rose-600' : 'text-gray-500'}`}>{md.return_3m ? md.return_3m + '%' : '—'}</td>
@@ -1326,6 +1346,8 @@ const ProductManager = () => {
                       <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_4_percent ? md.sector_4_percent + '%' : '—'}</td>
                       <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_5_name || '—'}</td>
                       <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_5_percent ? md.sector_5_percent + '%' : '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_6_name || '—'}</td>
+                      <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.sector_6_percent ? md.sector_6_percent + '%' : '—'}</td>
                       <td className="p-3 border-b border-[#E0DDD6] text-right text-gray-700">{md.source_file_name || '—'}</td>
                     </tr>
                   )
@@ -1369,19 +1391,47 @@ const ProductManager = () => {
 
             {/* TOP METRICS */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm">
-                <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">AUM APR 2026</div>
+              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm relative group">
+                <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                  <IconInfoCircle stroke={1.5} size={14} />
+                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                    Data From ID: {selectedMonthlyData[0]?.aum_cr ? getFieldSourceId(selectedMonthlyData[0], 'aum_cr') : getFieldSourceId(selectedMonthlyData[0], 'aum')}
+                  </div>
+                </div>
+                <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {selectedMonthlyData[0]?.aum_cr ? getFieldSourceMonth(selectedMonthlyData[0], 'aum_cr', monthlyData) : getFieldSourceMonth(selectedMonthlyData[0], 'aum', monthlyData)}</div>
+                <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">AUM</div>
                 <div className="text-lg font-semibold text-black">₹{selectedMonthlyData[0]?.aum_cr ? Number(selectedMonthlyData[0].aum_cr).toLocaleString() : selectedProduct.aum?.toLocaleString()} Cr</div>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm">
+              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm relative group">
+                <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                  <IconInfoCircle stroke={1.5} size={14} />
+                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                    Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'benchmark')}
+                  </div>
+                </div>
+                <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'benchmark', monthlyData)}</div>
                 <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">BENCHMARK</div>
                 <div className="text-lg font-semibold text-black truncate" title={selectedProduct.benchmark}>{selectedProduct.benchmark}</div>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm">
+              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm relative group">
+                <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                  <IconInfoCircle stroke={1.5} size={14} />
+                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                    Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'min_investment_label')}
+                  </div>
+                </div>
+                <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'min_investment_label', monthlyData)}</div>
                 <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">MIN INVEST</div>
                 <div className="text-lg font-semibold text-black">{selectedProduct.min_investment_label}</div>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm">
+              <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-3 text-center shadow-sm relative group">
+                <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                  <IconInfoCircle stroke={1.5} size={14} />
+                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                    Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'currency')}
+                  </div>
+                </div>
+                <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'currency', monthlyData)}</div>
                 <div className="text-[9px] uppercase font-bold tracking-wider text-gray-500 mb-1">CURRENCY</div>
                 <div className="text-lg font-semibold text-black">{selectedProduct.currency}</div>
               </div>
@@ -1409,217 +1459,86 @@ const ProductManager = () => {
                   <IconEdit size={16} />
                 </button>
               </div>
-              <div className="overflow-hidden">
-                <table className="w-full text-[11px] font-medium">
-                  <thead>
-                    <tr>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">CLASS</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Minimum Investment Label</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Minimum Investment Amount</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Maximum Investment Label</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Maximum Investment Amount</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Management Fee</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Performance Fee</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Hurdle Fee</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">High Water Mark</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Crystallization Frequency</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Lockin Period</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Catch Up</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Redemption Frequency</th>
-                      <th className="pb-3 uppercase tracking-wider text-black font-bold border-b border-[#D4AF37] text-center">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedFeeClasses.length > 0 ? selectedFeeClasses.map((fc, i) => (
-                      <React.Fragment key={i}>
-                        {fc.class_name && (
-                          <tr className="border-b border-black last:border-0 ">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent ? `${fc.management_fee_percent}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent ? `${fc.performance_fee_percent}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent ? `${fc.hurdle_percent}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name2 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name2}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment_amount2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment_amount2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent2 ? `${fc.management_fee_percent2}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent2 ? `${fc.performance_fee_percent2}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent2 ? `${fc.hurdle_percent2}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency2 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes2 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name3 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name3}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment_amount3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment_amount3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent3 ? `${fc.management_fee_percent3}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent3 ? `${fc.performance_fee_percent3}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent3 ? `${fc.hurdle_percent3}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency3 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes3 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name4 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase">{fc.class_name4}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment_amount4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment_amount4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent4 ? `${fc.management_fee_percent4}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent4 ? `${fc.performance_fee_percent4}% ` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent4 ? `${fc.hurdle_percent4}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency4 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes4 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name5 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name5}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment_amount5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment_amount5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent5 ? `${fc.management_fee_percent5}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent5 ? `${fc.performance_fee_percent5}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent5 ? `${fc.hurdle_percent5}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency5 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes5 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name6 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name6}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent6 ? `${fc.management_fee_percent6}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent6 ? `${fc.performance_fee_percent6}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent6 ? `${fc.hurdle_percent6}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency6 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes6 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name7 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name7}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent7 ? `${fc.management_fee_percent7}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent7 ? `${fc.performance_fee_percent7}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent7 ? `${fc.hurdle_percent7}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency7 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes7 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name8 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name8}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent8 ? `${fc.management_fee_percent8}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent8 ? `${fc.performance_fee_percent8}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent8 ? `${fc.hurdle_percent8}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency8 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes8 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name9 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name9}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent9 ? `${fc.management_fee_percent9}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent9 ? `${fc.performance_fee_percent9}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent9 ? `${fc.hurdle_percent9}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency9 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes9 || '—'}</td>
-                          </tr>
-                        )}
-                        {fc.class_name10 && (
-                          <tr className="border-b border-black last:border-0">
-                            <td className="py-4 text-black uppercase text-center">{fc.class_name10}</td>
-                            <td className="py-4 text-black text-center">{fc.min_label10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.min_investment10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_label10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.max_investment10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.management_fee_percent10 ? `${fc.management_fee_percent10}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.performance_fee_percent10 ? `${fc.performance_fee_percent10}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.hurdle_percent10 ? `${fc.hurdle_percent10}%` : '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.high_water_mark10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.crystallization_frequency10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.lockin_period10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.catch_up10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.redemption_frequency10 || '—'}</td>
-                            <td className="py-4 text-black text-center">{fc.notes10 || '—'}</td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    )) : (
-                      <tr className="border-b border-gray-100">
-                        <td colSpan="8" className="py-4 text-center text-gray-500">No fee classes configured</td>
-                      </tr>
+              <div className="overflow-x-auto w-full">
+                <div className="min-w-max text-[11px] font-medium">
+                  {/* Table Header */}
+                  <div className="flex border-b border-[#D4AF37] pb-3">
+                    <div className="flex-1 min-w-[90px] uppercase tracking-wider text-black font-bold text-center">CLASS</div>
+                    <div className="flex-1 min-w-[140px] uppercase tracking-wider text-black font-bold text-center">Minimum Investment Label</div>
+                    <div className="flex-1 min-w-[140px] uppercase tracking-wider text-black font-bold text-center">Minimum Investment Amount</div>
+                    <div className="flex-1 min-w-[140px] uppercase tracking-wider text-black font-bold text-center">Maximum Investment Label</div>
+                    <div className="flex-1 min-w-[140px] uppercase tracking-wider text-black font-bold text-center">Maximum Investment Amount</div>
+                    <div className="flex-1 min-w-[110px] uppercase tracking-wider text-black font-bold text-center">Management Fee</div>
+                    <div className="flex-1 min-w-[110px] uppercase tracking-wider text-black font-bold text-center">Performance Fee</div>
+                    <div className="flex-1 min-w-[100px] uppercase tracking-wider text-black font-bold text-center">Hurdle Fee</div>
+                    <div className="flex-1 min-w-[110px] uppercase tracking-wider text-black font-bold text-center">High Water Mark</div>
+                    <div className="flex-1 min-w-[130px] uppercase tracking-wider text-black font-bold text-center">Crystallization Frequency</div>
+                    <div className="flex-1 min-w-[100px] uppercase tracking-wider text-black font-bold text-center">Lockin Period</div>
+                    <div className="flex-1 min-w-[90px] uppercase tracking-wider text-black font-bold text-center">Catch Up</div>
+                    <div className="flex-1 min-w-[130px] uppercase tracking-wider text-black font-bold text-center">Redemption Frequency</div>
+                    <div className="flex-1 min-w-[120px] uppercase tracking-wider text-black font-bold text-center">Notes</div>
+                  </div>
+
+                  {/* Table Body */}
+                  <div>
+                    {selectedFeeClasses.length > 0 ? selectedFeeClasses.map((fc, i) => {
+                      const suffixes = ['', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+                      
+                      const renderFeeCell = (fieldName, value, minW = 'min-w-[110px]', isUppercase = false) => {
+                        const month = getFieldSourceMonth(fc, fieldName, monthlyData);
+                        const hasValue = value !== '—' && value !== null && value !== undefined && value !== '';
+                        return (
+                          <div className={`flex-1 ${minW} py-4 text-black text-center relative group ${isUppercase ? 'uppercase' : ''}`}>
+                            {hasValue && (
+                              <div className="absolute top-1 left-1 text-gray-400 hover:text-gray-600 cursor-help opacity-0 group-hover:opacity-100 transition-opacity">
+                                <IconInfoCircle stroke={1.5} size={12} />
+                                <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                                  Data From ID: {getFieldSourceId(fc, fieldName)}
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex flex-col items-center justify-center">
+                              {hasValue && month && (
+                                <span className="text-[8px] font-semibold text-gray-400 mb-0.5 leading-none whitespace-nowrap">As Of {month}</span>
+                              )}
+                              <span className="relative z-0 leading-tight">{value || '—'}</span>
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <React.Fragment key={i}>
+                          {suffixes.map(s => {
+                            if (!fc[`class_name${s}`]) return null;
+                            return (
+                              <div key={s} className="flex items-center border-b border-black last:border-0">
+                                {renderFeeCell(`class_name${s}`, fc[`class_name${s}`], 'min-w-[90px]', true)}
+                                {renderFeeCell(`min_label${s}`, fc[`min_label${s}`], 'min-w-[140px]')}
+                                {renderFeeCell(`min_investment${s}`, fc[`min_investment${s}`], 'min-w-[140px]')}
+                                {renderFeeCell(`max_label${s}`, fc[`max_label${s}`], 'min-w-[140px]')}
+                                {renderFeeCell(`max_investment${s}`, fc[`max_investment${s}`], 'min-w-[140px]')}
+                                {renderFeeCell(`management_fee_percent${s}`, fc[`management_fee_percent${s}`] ? `${fc[`management_fee_percent${s}`]}%` : null, 'min-w-[110px]')}
+                                {renderFeeCell(`performance_fee_percent${s}`, fc[`performance_fee_percent${s}`] ? `${fc[`performance_fee_percent${s}`]}%` : null, 'min-w-[110px]')}
+                                {renderFeeCell(`hurdle_percent${s}`, fc[`hurdle_percent${s}`] ? `${fc[`hurdle_percent${s}`]}%` : null, 'min-w-[100px]')}
+                                {renderFeeCell(`high_water_mark${s}`, fc[`high_water_mark${s}`], 'min-w-[110px]')}
+                                {renderFeeCell(`crystallization_frequency${s}`, fc[`crystallization_frequency${s}`], 'min-w-[130px]')}
+                                {renderFeeCell(`lockin_period${s}`, fc[`lockin_period${s}`], 'min-w-[100px]')}
+                                {renderFeeCell(`catch_up${s}`, fc[`catch_up${s}`], 'min-w-[90px]')}
+                                {renderFeeCell(`redemption_frequency${s}`, fc[`redemption_frequency${s}`], 'min-w-[130px]')}
+                                {renderFeeCell(`notes${s}`, fc[`notes${s}`], 'min-w-[120px]')}
+                              </div>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    }) : (
+                      <div className="py-4 text-center text-gray-500 border-b border-gray-100">
+                        No fee classes configured
+                      </div>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               </div>
 
             </div>
@@ -1628,59 +1547,79 @@ const ProductManager = () => {
             <div className="mb-10">
               <div className="flex items-center gap-3 mb-4">
                 <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black">Monthly Performance</h3>
-                <button className="text-[#C9981A] hover:text-[#b38617] transition" title="Edit" onClick={(e) => { e.stopPropagation(); if (selectedMonthlyData.length > 0) handleEditMonthlyData(selectedMonthlyData[0]); }}>
-                  <IconEdit size={16} />
-                </button>
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-11 gap-2 md:gap-3">
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_1y}%</div>
+                <div className="flex flex-wrap -m-1.5">
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_1y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">2Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_2y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">2Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_2y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_3y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_3y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">5Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_5y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">5Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_5y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">7Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_7y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">7Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_7y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">10Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_10y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">10Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_10y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_1m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_1m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_3m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_3m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">6M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_6m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">6M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.return_6m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">SINCE INCEP</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.since_inception}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">SINCE INCEP</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.since_inception}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">YTM</div>
-                  <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.ytm) || 0}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">YTM</div>
+                    <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.ytm) || 0}%</div>
+                  </div>
                 </div>
-
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Mod(Y)</div>
-                  <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.mod_year) || 0}</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Mod(Y)</div>
+                    <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.mod_year) || 0}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1693,38 +1632,54 @@ const ProductManager = () => {
                   <IconEdit size={16} />
                 </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_1y}%</div>
+              <div className="flex flex-wrap -m-1.5">
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_1y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">2Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_2y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">2Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_2y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_3y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_3y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">5Y</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_5y}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">5Y</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_5y}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_1m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">1M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_1m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_3m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">3M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_3m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">6M</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_6m}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">6M</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_6m}%</div>
+                  </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2"> SinceInception</div>
-                  <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_sinceinception}%</div>
+                <div className="w-1/2 sm:w-1/4 p-1.5 flex">
+                  <div className="w-full h-full bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2"> SinceInception</div>
+                    <div className="text-xl font-bold text-green-600">{selectedMonthlyData[0]?.benchmark_return_sinceinception}%</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1734,35 +1689,86 @@ const ProductManager = () => {
                 <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black">CAPITAL ALLOCATION BREAKDOWN</h3>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'large_cap')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'large_cap', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Large Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.large_cap) || 0}%</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'mid_cap')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'mid_cap', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Mid Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.mid_cap) || 0}%</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'small_cap')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'small_cap', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Small Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.small_cap) || 0}%</div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'debt_cap')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'debt_cap', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Debt Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.debt_cap) || 0}%</div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'other_cap')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'other_cap', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Other Cap</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.other_cap) || 0}%</div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'cash_percent')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'cash_percent', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">Cash</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.cash_percent) || 0}%</div>
                 </div>
 
-                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 border-t-[3px] border-t-[#D4AF37] p-4 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'nav')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-1 mt-[-4px]">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'nav', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-2">NAV</div>
                   <div className="text-xl font-bold text-green-600">{(selectedMonthlyData[0]?.nav) || 0}</div>
                 </div>
@@ -1774,31 +1780,80 @@ const ProductManager = () => {
             <div className="mb-10">
               <h3 className="text-[13px] font-serif font-bold uppercase tracking-wider text-black mb-4">RISK METRICS</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'sharpe_ratio')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'sharpe_ratio', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">SHARPE</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.sharpe_ratio) > 0 ? '+' : ''}{selectedMonthlyData[0]?.sharpe_ratio}</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'sortino_ratio')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'sortino_ratio', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">SORTINO</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.sortino_ratio) > 0 ? '+' : ''}{selectedMonthlyData[0]?.sortino_ratio}</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'alpha_1y')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'alpha_1y', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">ALPHA 1Y</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.alpha_1y) > 0 ? '+' : ''}{selectedMonthlyData[0]?.alpha_1y}%</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'alpha_3y')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'alpha_3y', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">ALPHA 3Y</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.alpha_3y) > 0 ? '+' : ''}{selectedMonthlyData[0]?.alpha_3y}%</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'beta')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'beta', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">BETA</div>
                   <div className="text-lg font-bold text-black">{(selectedMonthlyData[0]?.beta) > 0 ? '+' : ''}{selectedMonthlyData[0]?.beta}</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'pe_ratio')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'pe_ratio', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">PE RATIO</div>
                   <div className="text-lg font-bold text-black">{selectedMonthlyData[0]?.pe_ratio}</div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm relative group">
+                  <div className="absolute top-2 left-2 text-gray-400 hover:text-gray-600 cursor-help">
+                    <IconInfoCircle stroke={1.5} size={14} />
+                    <div className="hidden group-hover:block absolute bottom-full left-0 mb-1 w-max px-2 py-1 text-[10px] text-white bg-gray-800 rounded shadow-md z-10 font-normal normal-case tracking-normal text-left">
+                      Data From ID: {getFieldSourceId(selectedMonthlyData[0], 'pb_ratio')}
+                    </div>
+                  </div>
+                  <div className="text-[9px] font-semibold text-gray-400 mb-0 mt-3">As Of {getFieldSourceMonth(selectedMonthlyData[0], 'pb_ratio', monthlyData)}</div>
                   <div className="text-[10px] uppercase font-bold tracking-wider text-black mb-1">PB RATIO</div>
                   <div className="text-lg font-bold text-black">{selectedMonthlyData[0]?.pb_ratio}</div>
                 </div>
@@ -1905,8 +1960,8 @@ const ProductManager = () => {
           </div>
         )}
       </div>
-    </div>
+      <Chatbot />
+    </div>   
   );
 }
-
 export default ProductManager;

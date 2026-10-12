@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { IconX, IconPlus, IconMinus } from '@tabler/icons-react';
+import {API_URL} from '../services/api';
 
 const typeOptions = ["PMS", "SIF","MF", "AIF CAT I", "AIF CAT II", "AIF CAT III", "GIFTCITY PMS - INBOUND", "GIFTCITY PMS - OUTBOUND", "GIFTCITY AIF CAT I - INBOUND", "GIFTCITY AIF CAT II - INBOUND", "GIFTCITY AIF CAT III - INBOUND", "GIFTCITY AIF CAT I - OUTBOUND", "GIFTCITY AIF CAT II - OUTBOUND", "GIFTCITY AIF CAT III - OUTBOUND", "GIFTCITY MF INBOUND", "GIFTCITY MF OUTBOUND", "INTERNATIONAL ETF", "INTERNATIONAL FUNDS"];
 
@@ -185,7 +186,7 @@ const AddAllDashboardData = ({ isOpen, onClose, onSuccess }) => {
 
   useEffect(() => {
     if (isOpen) {
-      axios.get('https://product.tievista.com/api/amcs')
+      axios.get(`${API_URL}/amcs`)
         .then(res => {
           if (res.data && Array.isArray(res.data)) {
             const amcNames = Array.from(new Set(res.data.map(a => a.amc_name).filter(Boolean))).sort();
@@ -194,7 +195,7 @@ const AddAllDashboardData = ({ isOpen, onClose, onSuccess }) => {
         })
         .catch(err => console.error("Failed to fetch AMCs", err));
 
-      axios.get('https://product.tievista.com/api/benchmarks')
+      axios.get(`${API_URL}/benchmarks`)
         .then(res => {
           if (res.data && Array.isArray(res.data)) {
             const benchNames = Array.from(new Set(res.data.map(b => b.benchmark_name).filter(Boolean))).sort();
@@ -247,7 +248,7 @@ const AddAllDashboardData = ({ isOpen, onClose, onSuccess }) => {
         feeClasses: feeClassData
       };
 
-      await axios.post('https://product.tievista.com/api/add-product', payload);
+      await axios.post(`${API_URL}/add-product`, payload);
       onSuccess();
       onClose();
       reset();

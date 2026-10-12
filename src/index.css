@@ -46,3 +46,10 @@ tr:hover td {
 tr.sel td {
   background: var(--color-gold-p);
 }
+
+.gold-button {
+  background: linear-gradient(90deg, #F3D34F 0%, #D59D1C 50%, #F5D958 75%, #E0B12D 100%);
+  border: none;
+  color: #fff;
+  padding: 10px 20px;
+}

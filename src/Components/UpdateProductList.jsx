@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { IconX } from '@tabler/icons-react';
+import { API_URL } from '../services/api';
 
 const typeOptions = ["PMS","SIF", "MF", "AIF CAT I", "AIF CAT II", "AIF CAT III", "GIFTCITY PMS - INBOUND", "GIFTCITY PMS - OUTBOUND", "GIFTCITY AIF CAT I - INBOUND", "GIFTCITY AIF CAT II - INBOUND", "GIFTCITY AIF CAT III - INBOUND", "GIFTCITY AIF CAT I - OUTBOUND", "GIFTCITY AIF CAT II - OUTBOUND", "GIFTCITY AIF CAT III - OUTBOUND", "GIFTCITY MF INBOUND", "GIFTCITY MF OUTBOUND", "INTERNATIONAL ETF", "INTERNATIONAL FUNDS"];
 
@@ -56,7 +57,7 @@ const UpdateProductList = ({ isOpen, onClose, product, onUpdateSuccess }) => {
   useEffect(() => {
     if (isOpen) {
       setIsAmcsLoading(true);
-      axios.get('https://product.tievista.com/api/amcs')
+      axios.get(`${API_URL}/amcs`)
         .then(res => {
           if (res.data && Array.isArray(res.data)) {
             const amcNames = Array.from(new Set(res.data.map(a => a.amc_name).filter(Boolean))).sort();
@@ -67,7 +68,7 @@ const UpdateProductList = ({ isOpen, onClose, product, onUpdateSuccess }) => {
         .finally(() => setIsAmcsLoading(false));
 
       setIsBenchmarksLoading(true);
-      axios.get('https://product.tievista.com/api/benchmarks')
+      axios.get(`${API_URL}/benchmarks`)
         .then(res => {
           if (res.data && Array.isArray(res.data)) {
             const benchNames = Array.from(new Set(res.data.map(b => b.benchmark_name).filter(Boolean))).sort();
@@ -139,7 +140,7 @@ const UpdateProductList = ({ isOpen, onClose, product, onUpdateSuccess }) => {
         }
       });
 
-      await axios.put(`https://product.tievista.com/api/update/product/${product.id}`, payload);
+      await axios.put(`${API_URL}/update/product/${product.id}`, payload);
       onUpdateSuccess();
       onClose();
     } catch (err) {

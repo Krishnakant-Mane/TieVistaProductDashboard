@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { uploadPdf } from '../services/api';
+import { API_URL } from '../services/api';
 
 const UploadModal = ({ isOpen, onClose, onSuccess }) => {
   const [file, setFile] = useState(null);
@@ -72,7 +73,7 @@ const UploadModal = ({ isOpen, onClose, onSuccess }) => {
         </button>
         
         <h2 className="text-xl font-bold text-black">Upload Factsheet PDF</h2>
-        <h4 className='text-xs font-light text-black mb-4'>Please ensure that all sensitive and confidential information is masked or redacted before uploading the PDF.</h4>
+        <h4 className='text-xs font-light text-red-700 mb-4'>Please ensure that all sensitive and confidential information is masked or redacted before uploading the PDF.</h4>
         
         {!file ? (
           <div 

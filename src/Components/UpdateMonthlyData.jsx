@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { IconX } from '@tabler/icons-react';
+import { API_URL } from '../services/api';
 
 const SECTIONS = [
   {
@@ -166,7 +167,7 @@ const UpdateMonthlyData = ({ isOpen, onClose, monthlyData, onUpdateSuccess }) =>
         });
       });
 
-      await axios.put(`https://product.tievista.com/api/update/monthly-data/${monthlyData.product_id}`, payload);
+      await axios.put(`${API_URL}/update/monthly-data/${monthlyData.product_id}`, payload);
       onUpdateSuccess();
       onClose();
     } catch (err) {

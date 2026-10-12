@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { IconX, IconEdit, IconTrash, IconPlus, IconCheck } from '@tabler/icons-react';
+import { API_URL } from '../services/api';
 
 const AmcPanel = ({ isOpen, onClose }) => {
   const [amcs, setAmcs] = useState([]);
@@ -11,7 +12,7 @@ const AmcPanel = ({ isOpen, onClose }) => {
   const fetchAmcs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('https://product.tievista.com/api/amcs');
+      const res = await axios.get(`${API_URL}/amcs`);
       setAmcs(res.data);
     } catch (err) {
       console.error(err);
@@ -43,7 +44,7 @@ const AmcPanel = ({ isOpen, onClose }) => {
   const handleDelete = async (id) => {
     if(!window.confirm("Are you sure you want to delete this AMC?")) return;
     try {
-      await axios.delete(`https://product.tievista.com/api/amcs/${id}`);
+      await axios.delete(`${API_URL}/amcs/${id}`);
       fetchAmcs();
     } catch (err) {
       console.error(err);
@@ -55,10 +56,10 @@ const AmcPanel = ({ isOpen, onClose }) => {
     try {
       if (formData.id) {
         // update
-        await axios.put(`https://product.tievista.com/api/amcs/${formData.id}`, formData);
+        await axios.put(`${API_URL}/amcs/${formData.id}`, formData);
       } else {
         // create
-        await axios.post('https://product.tievista.com/api/amcs', formData);
+        await axios.post(`${API_URL}/amcs`, formData);
       }
       setEditingAmc(null);
       fetchAmcs();

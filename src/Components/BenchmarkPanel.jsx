@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { IconX, IconEdit, IconTrash, IconPlus, IconCheck } from '@tabler/icons-react';
+import {API_URL} from '../services/api';
 
 const BenchmarkPanel = ({ isOpen, onClose }) => {
   const [benchmarks, setBenchmarks] = useState([]);
@@ -11,7 +12,7 @@ const BenchmarkPanel = ({ isOpen, onClose }) => {
   const fetchBenchmarks = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('https://product.tievista.com/api/benchmarks');
+      const res = await axios.get(`${API_URL}/benchmarks`);
       setBenchmarks(res.data);
     } catch (err) {
       console.error(err);
@@ -42,7 +43,7 @@ const BenchmarkPanel = ({ isOpen, onClose }) => {
   const handleDelete = async (id) => {
     if(!window.confirm("Are you sure you want to delete this Benchmark?")) return;
     try {
-      await axios.delete(`https://product.tievista.com/api/benchmarks/${id}`);
+      await axios.delete(`${API_URL}/benchmarks/${id}`);
       fetchBenchmarks();
     } catch (err) {
       console.error(err);
@@ -54,10 +55,10 @@ const BenchmarkPanel = ({ isOpen, onClose }) => {
     try {
       if (formData.id) {
         // update
-        await axios.put(`https://product.tievista.com/api/benchmarks/${formData.id}`, formData);
+        await axios.put(`${API_URL}/benchmarks/${formData.id}`, formData);
       } else {
         // create
-        await axios.post('https://product.tievista.com/api/benchmarks', formData);
+        await axios.post(`${API_URL}/benchmarks`, formData);
       }
       setEditingBenchmark(null);
       fetchBenchmarks();
